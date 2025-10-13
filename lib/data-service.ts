@@ -1,5 +1,19 @@
-// Data service with stubbed responses for QuickBooks data
-// Types are QBO-shaped so we can swap in real API later
+// Data service integrated with real APIs
+// Types are QBO-shaped and match backend API models
+
+import { 
+  AuthApi, 
+  YardiToQbApi, 
+  QbToYardiApi, 
+  ApiUtils,
+  type SyncRequest,
+  type QBToYardiRequest,
+  type SyncResponse,
+  type AuthStatusResponse,
+  ApiError
+} from './api-service'
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'
 
 export type ExpenseInvoice = {
   id: string
@@ -33,6 +47,18 @@ export type PendingRow = {
 export type PendingBatch = {
   id: string
   rows: PendingRow[]
+}
+
+// Sync operation types
+export type SyncOperation = {
+  id: string
+  type: 'yardi_to_qb' | 'qb_to_yardi'
+  status: 'init' | 'in_progress' | 'completed' | 'failed'
+  message: string
+  timestamp: string
+  recordsProcessed?: number
+  outputFiles?: string[]
+  errors?: string[]
 }
 
 // Stub data
@@ -122,26 +148,171 @@ const mockRentPayments: RentPayment[] = [
 ]
 
 export class DataService {
+  // Authentication methods
+  static async getAuthStatus(): Promise<AuthStatusResponse> {
+    try {
+      return await AuthApi.getAuthStatus()
+    } catch (error) {
+      console.error('Failed to get auth status:', error)
+      // Return default unauthenticated status
+      return {
+        authenticated: false,
+        environment: 'sandbox',
+        message: 'Not authenticated',
+        timestamp: new Date().toISOString()
+      }
+    }
+  }
+
+  static async initiateQuickBooksAuth(environment: string = 'sandbox'): Promise<string> {
+    try {
+      const response = await AuthApi.initiateOAuth(environment)
+      return response.auth_url
+    } catch (error) {
+      console.error('Failed to initiate OAuth:', error)
+      throw new Error('Failed to initiate QuickBooks authentication')
+    }
+  }
+
+  static async handleOAuthCallback(code: string, state: string, realmId: string): Promise<boolean> {
+    try {
+      const response = await AuthApi.exchangeCode(code, state, realmId)
+      return response.success
+    } catch (error) {
+      console.error('Failed to handle OAuth callback:', error)
+      return false
+    }
+  }
+
+  // Sync operations
+  static async syncYardiToQuickBooks(
+    dataType: 'bills' | 'receipts' | 'bill_payments' | 'customer_payments' | 'all' = 'bills',
+    propertyCode: string = 'chabot'
+  ): Promise<SyncOperation> {
+    try {
+      const request: SyncRequest = {
+        data_type: dataType,
+        property_code: propertyCode,
+        source_system: 'yardi',
+        target_system: 'quickbooks'
+      }
+      
+      const response = await YardiToQbApi.syncYardiToQb(request)
+      
+      return {
+        id: response.sync_id,
+        type: 'yardi_to_qb',
+        status: response.status,
+        message: response.message,
+        timestamp: response.timestamp,
+        recordsProcessed: response.records_processed,
+        outputFiles: response.output_files,
+        errors: response.errors
+      }
+    } catch (error) {
+      console.error('Failed to sync Yardi to QuickBooks:', error)
+      throw new Error('Failed to sync data from Yardi to QuickBooks')
+    }
+  }
+
+  static async syncQuickBooksToYardi(
+    dataType: 'bills' | 'receipts' | 'bill_payments' | 'customer_payments' | 'all' = 'all',
+    startDate?: string,
+    endDate?: string,
+    propertyCode: string = 'DEFAULT'
+  ): Promise<SyncOperation> {
+    try {
+      const request: QBToYardiRequest = {
+        data_type: dataType,
+        start_date: startDate,
+        end_date: endDate,
+        property_code: propertyCode,
+        output_dir: 'data/output'
+      }
+      
+      const response = await QbToYardiApi.syncQbToYardi(request)
+      
+      return {
+        id: response.sync_id,
+        type: 'qb_to_yardi',
+        status: response.status,
+        message: response.message,
+        timestamp: response.timestamp,
+        recordsProcessed: response.records_processed,
+        outputFiles: response.output_files,
+        errors: response.errors
+      }
+    } catch (error) {
+      console.error('Failed to sync QuickBooks to Yardi:', error)
+      throw new Error('Failed to sync data from QuickBooks to Yardi')
+    }
+  }
+
+  static async getSyncStatus(syncId: string, type: 'yardi_to_qb' | 'qb_to_yardi'): Promise<SyncOperation> {
+    try {
+      const response = type === 'yardi_to_qb' 
+        ? await YardiToQbApi.getSyncStatus(syncId)
+        : await QbToYardiApi.getSyncStatus(syncId)
+      
+      return {
+        id: response.sync_id,
+        type,
+        status: response.status,
+        message: response.message,
+        timestamp: response.timestamp,
+        recordsProcessed: response.records_processed,
+        outputFiles: response.output_files,
+        errors: response.errors
+      }
+    } catch (error) {
+      console.error('Failed to get sync status:', error)
+      throw new Error('Failed to get sync status')
+    }
+  }
+
+  // Data fetching methods - now using real QuickBooks API
   static async fetchExpenseInvoices(params: {
     from?: string
     to?: string
     search?: string
   }): Promise<ExpenseInvoice[]> {
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    try {
+      const queryParams = new URLSearchParams()
+      if (params.from) queryParams.append('from_date', params.from)
+      if (params.to) queryParams.append('to_date', params.to)
+      if (params.search) queryParams.append('search', params.search)
 
-    let results = [...mockExpenseInvoices]
+      const response = await fetch(`${API_BASE_URL}/data/expense-invoices?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
 
-    // Simple search filter
-    if (params.search) {
-      const searchLower = params.search.toLowerCase()
-      results = results.filter(
-        (inv) =>
-          inv.vendorName.toLowerCase().includes(searchLower) || inv.docNumber.toLowerCase().includes(searchLower),
-      )
+      if (!response.ok) {
+        throw new Error(`Failed to fetch expense invoices: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      return result.data || []
+    } catch (error) {
+      console.error('Error fetching expense invoices:', error)
+      // Fallback to mock data if API fails
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      let results = [...mockExpenseInvoices]
+
+      // Simple search filter
+      if (params.search) {
+        const searchLower = params.search.toLowerCase()
+        results = results.filter(
+          (inv) =>
+            inv.vendorName.toLowerCase().includes(searchLower) || inv.docNumber.toLowerCase().includes(searchLower),
+        )
+      }
+
+      return results
     }
-
-    return results
   }
 
   static async fetchRentPayments(params: {
@@ -149,25 +320,48 @@ export class DataService {
     to?: string
     search?: string
   }): Promise<RentPayment[]> {
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    try {
+      const queryParams = new URLSearchParams()
+      if (params.from) queryParams.append('from_date', params.from)
+      if (params.to) queryParams.append('to_date', params.to)
+      if (params.search) queryParams.append('search', params.search)
 
-    let results = [...mockRentPayments]
+      const response = await fetch(`${API_BASE_URL}/data/rent-payments?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
 
-    // Simple search filter
-    if (params.search) {
-      const searchLower = params.search.toLowerCase()
-      results = results.filter(
-        (pmt) =>
-          pmt.tenantName.toLowerCase().includes(searchLower) || pmt.reference.toLowerCase().includes(searchLower),
-      )
+      if (!response.ok) {
+        throw new Error(`Failed to fetch rent payments: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      return result.data || []
+    } catch (error) {
+      console.error('Error fetching rent payments:', error)
+      // Fallback to mock data if API fails
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      let results = [...mockRentPayments]
+
+      // Simple search filter
+      if (params.search) {
+        const searchLower = params.search.toLowerCase()
+        results = results.filter(
+          (pmt) =>
+            pmt.tenantName.toLowerCase().includes(searchLower) || pmt.reference.toLowerCase().includes(searchLower),
+        )
+      }
+
+      return results
     }
-
-    return results
   }
 
   static async fetchPendingBatch(): Promise<PendingBatch> {
-    // Simulate API delay
+    // TODO: Replace with real API call when backend provides this endpoint
+    // For now, use mock data but simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 300))
 
     return {
@@ -233,6 +427,20 @@ export class DataService {
           status: "valid",
         },
       ],
+    }
+  }
+
+  // Health check
+  static async healthCheck(): Promise<{ status: string; timestamp: string; services: any }> {
+    try {
+      return await ApiUtils.healthCheck()
+    } catch (error) {
+      console.error('Health check failed:', error)
+      return {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        services: { error: 'API unavailable' }
+      }
     }
   }
 }

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
+import { DataService } from "@/lib/data-service"
 
 type DateRangeOption = "this-month" | "last-month"
 
@@ -21,16 +22,30 @@ export function SettingsContent() {
     const savedDateRange = localStorage.getItem("elas-date-range") as DateRangeOption
     const savedClearingAccount = localStorage.getItem("elas-clearing-account")
 
-    const savedQb = localStorage.getItem("elas-qb-connected")
-    const savedQbAccount = localStorage.getItem("elas-qb-account")
-
-    if (savedQb === "true") {
-      setQbConnected(true)
-      if (savedQbAccount) setQbAccountName(savedQbAccount)
-    }
-
     if (savedDateRange) setDateRange(savedDateRange)
     if (savedClearingAccount) setClearingAccount(savedClearingAccount)
+
+    // Check QuickBooks authentication status from API
+    const checkAuthStatus = async () => {
+      try {
+        const authStatus = await DataService.getAuthStatus()
+        setQbConnected(authStatus.authenticated)
+        if (authStatus.authenticated && authStatus.realm_id) {
+          setQbAccountName(`QuickBooks Account (${authStatus.realm_id})`)
+        }
+      } catch (error) {
+        console.error('Failed to check auth status:', error)
+        // Fallback to localStorage
+        const savedQb = localStorage.getItem("elas-qb-connected")
+        const savedQbAccount = localStorage.getItem("elas-qb-account")
+        if (savedQb === "true") {
+          setQbConnected(true)
+          if (savedQbAccount) setQbAccountName(savedQbAccount)
+        }
+      }
+    }
+
+    checkAuthStatus()
   }, [])
 
   // Save settings to localStorage whenever they change
@@ -41,57 +56,85 @@ export function SettingsContent() {
 
   // QuickBooks connect / disconnect handlers
   const handleConnectQuickBooks = async () => {
-    const authUrl = process.env.NEXT_PUBLIC_QB_AUTH_URL || ''
-
     try {
-      const res = await fetch('/api/quickbooks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'SELECT * FROM Bill STARTPOSITION 1 MAXRESULTS 1' }),
-      })
-
-      const json = await res.json().catch(() => ({}))
-
-      if (res.ok && json && json.ok) {
-        // Consider this a successful server-side connection. Persist state.
-        const accountName = json?.data?.QueryResponse?.Bill ? 'QuickBooks Account' : 'QuickBooks Account'
-        localStorage.setItem('elas-qb-connected', 'true')
-        localStorage.setItem('elas-qb-account', accountName)
+      // Check current authentication status
+      const authStatus = await DataService.getAuthStatus()
+      
+      if (authStatus.authenticated) {
+        // Already connected
+        const accountName = authStatus.realm_id ? `QuickBooks Account (${authStatus.realm_id})` : 'QuickBooks Account'
         setQbConnected(true)
         setQbAccountName(accountName)
-        toast({ title: 'Connected to QuickBooks', description: accountName, duration: 3000 })
+        toast({ title: 'Already connected to QuickBooks', description: accountName, duration: 3000 })
         return
       }
 
-      // If server call failed (no tokens / unauth), open OAuth URL when available
-      const errMsg = json?.message || `Server returned ${res.status}`
-      if (authUrl) {
-        window.open(authUrl, '_blank', 'width=600,height=700')
-        toast({ title: 'Opened QuickBooks connect window', description: errMsg, duration: 4000 })
-        return
+      // Initiate OAuth flow with redirect
+      const authUrl = await DataService.initiateQuickBooksAuth('sandbox')
+      
+      // Option 1: Open in new window/tab (preferred for OAuth)
+      const authWindow = window.open(authUrl, 'quickbooks-auth', 'width=800,height=600')
+      
+      // Check if window was blocked
+      if (!authWindow || authWindow.closed || typeof authWindow.closed === 'undefined') {
+        // Fallback: Redirect in current window
+        toast({ 
+          title: 'Redirecting to QuickBooks...', 
+          description: 'You will be redirected back after authentication',
+          duration: 3000 
+        })
+        setTimeout(() => {
+          window.location.href = authUrl
+        }, 1000)
+      } else {
+        toast({ title: 'Opening QuickBooks authorization...', duration: 3000 })
+        
+        // Listen for message from popup
+        const messageHandler = async (event: MessageEvent) => {
+          if (event.data && event.data.type === 'auth-success') {
+            // Check if we're now authenticated
+            try {
+              const newAuthStatus = await DataService.getAuthStatus()
+              if (newAuthStatus.authenticated) {
+                setQbConnected(true)
+                setQbAccountName(`QuickBooks Account (${newAuthStatus.realm_id || 'Connected'})`)
+                toast({ title: 'Successfully connected to QuickBooks!', duration: 3000 })
+              }
+            } catch (error) {
+              console.error('Error checking auth status:', error)
+            }
+          }
+        }
+        
+        window.addEventListener('message', messageHandler)
+        
+        // Check periodically if the window is closed
+        const checkInterval = setInterval(async () => {
+          if (authWindow.closed) {
+            clearInterval(checkInterval)
+            window.removeEventListener('message', messageHandler)
+            // Check if we're now authenticated
+            try {
+              const newAuthStatus = await DataService.getAuthStatus()
+              if (newAuthStatus.authenticated) {
+                setQbConnected(true)
+                setQbAccountName(`QuickBooks Account (${newAuthStatus.realm_id || 'Connected'})`)
+                toast({ title: 'Successfully connected to QuickBooks!', duration: 3000 })
+              }
+            } catch (error) {
+              console.error('Error checking auth status:', error)
+            }
+          }
+        }, 1000)
       }
-
-      // Fallback/demo connect for local dev when no OAuth URL is configured
-      const demoName = 'Demo QuickBooks Account'
-      localStorage.setItem('elas-qb-connected', 'true')
-      localStorage.setItem('elas-qb-account', demoName)
-      setQbConnected(true)
-      setQbAccountName(demoName)
-      toast({ title: 'Connected to QuickBooks (demo)', description: demoName, duration: 3000 })
-    } catch (err: any) {
-      // Network or unexpected error: open OAuth or fallback
-      if (authUrl) {
-        window.open(authUrl, '_blank', 'width=600,height=700')
-        toast({ title: 'Opened QuickBooks connect window', description: String(err?.message || err), duration: 4000 })
-        return
-      }
-
-      const demoName = 'Demo QuickBooks Account'
-      localStorage.setItem('elas-qb-connected', 'true')
-      localStorage.setItem('elas-qb-account', demoName)
-      setQbConnected(true)
-      setQbAccountName(demoName)
-      toast({ title: 'Connected to QuickBooks (demo)', description: demoName, duration: 3000 })
+      
+    } catch (error) {
+      console.error('QuickBooks connect error:', error)
+      toast({ 
+        title: 'Failed to connect QuickBooks', 
+        description: error instanceof Error ? error.message : 'Unknown error',
+        duration: 4000 
+      })
     }
   }
 

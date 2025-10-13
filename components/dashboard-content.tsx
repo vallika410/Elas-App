@@ -68,86 +68,133 @@ export function DashboardContent() {
   }
 
   const handleSyncYardi = async () => {
-    // If Yardi is not connected, open the Yardi connect URL (or simulate)
-    const yardConnected = localStorage.getItem('elas-yard-connected') === 'true'
-    const authUrl = process.env.NEXT_PUBLIC_YARDI_AUTH_URL || ''
+    try {
+      toast({ title: 'Starting sync from Yardi...', duration: 2000 })
+      setLoadingExpenses(true)
+      setLoadingRent(true)
 
-    if (!yardConnected) {
-      if (authUrl) {
-        window.open(authUrl, '_blank', 'width=600,height=700')
-        toast({ title: 'Opened Yardi connect window', duration: 3000 })
-        return
+      // Sync both bills and receipts from Yardi to QuickBooks
+      const [billsSync, receiptsSync] = await Promise.all([
+        DataService.syncYardiToQuickBooks('bills', 'chabot'),
+        DataService.syncYardiToQuickBooks('receipts', 'chabot')
+      ])
+      
+      // Check results for both syncs
+      const totalRecords = (billsSync.recordsProcessed || 0) + (receiptsSync.recordsProcessed || 0)
+      const failedSyncs = []
+      const completedSyncs = []
+      
+      if (billsSync.status === 'failed') {
+        failedSyncs.push('Bills')
+      } else if (billsSync.status === 'completed') {
+        completedSyncs.push(`Bills (${billsSync.recordsProcessed || 0} records)`)
+      }
+      
+      if (receiptsSync.status === 'failed') {
+        failedSyncs.push('Receipts')
+      } else if (receiptsSync.status === 'completed') {
+        completedSyncs.push(`Receipts (${receiptsSync.recordsProcessed || 0} records)`)
+      }
+      
+      // Show appropriate toast message
+      if (failedSyncs.length === 2) {
+        toast({ 
+          title: 'Yardi sync failed', 
+          description: 'Both bills and receipts sync failed',
+          duration: 4000 
+        })
+      } else if (failedSyncs.length === 1) {
+        toast({ 
+          title: 'Partial sync completed', 
+          description: `${failedSyncs[0]} sync failed, but ${completedSyncs.join(' and ')} completed successfully`,
+          duration: 4000 
+        })
+      } else if (completedSyncs.length === 2) {
+        toast({ 
+          title: 'Yardi sync completed successfully', 
+          description: `Synced ${completedSyncs.join(' and ')}. Total: ${totalRecords} records`,
+          duration: 3000 
+        })
+      } else {
+        toast({ 
+          title: 'Yardi sync in progress', 
+          description: 'Sync operations are still running',
+          duration: 3000 
+        })
       }
 
-      // Fallback/demo: simulate connect and mark as connected
-      localStorage.setItem('elas-yard-connected', 'true')
-      toast({ title: 'Connected to Yardi (demo)', duration: 2000 })
+      // Refresh the data
+      await loadExpenses()
+      await loadRentPayments()
+    } catch (error) {
+      console.error('Yardi sync error:', error)
+      toast({ 
+        title: 'Yardi sync error', 
+        description: error instanceof Error ? error.message : 'Unknown error',
+        duration: 4000 
+      })
+    } finally {
+      setLoadingExpenses(false)
+      setLoadingRent(false)
     }
-
-    toast({ title: 'Starting sync from Yardi...', duration: 2000 })
-    setLoadingExpenses(true)
-    setLoadingRent(true)
-    // TODO: replace with real server-side sync endpoint when available
-    await new Promise((r) => setTimeout(r, 800))
-    await loadExpenses()
-    await loadRentPayments()
-    toast({ title: 'Yardi sync complete.', duration: 2000 })
   }
 
   const handleSyncQuickBooks = async () => {
-    // If QuickBooks is not connected, open the QB OAuth flow (or simulate)
-    const qbConnected = localStorage.getItem('elas-qb-connected') === 'true'
-    const qbAuthUrl = process.env.NEXT_PUBLIC_QB_AUTH_URL || ''
-
-    if (!qbConnected) {
-      if (qbAuthUrl) {
-        window.open(qbAuthUrl, '_blank', 'width=600,height=700')
+    try {
+      // Check authentication status first
+      const authStatus = await DataService.getAuthStatus()
+      
+      if (!authStatus.authenticated) {
+        // Initiate OAuth flow
+        const authUrl = await DataService.initiateQuickBooksAuth('sandbox')
+        window.open(authUrl, '_blank', 'width=600,height=700')
         toast({ title: 'Opened QuickBooks connect window', duration: 3000 })
         return
       }
 
-      // Fallback/demo: simulate a connected account
-      const demoName = 'Demo QuickBooks Account'
-      localStorage.setItem('elas-qb-connected', 'true')
-      localStorage.setItem('elas-qb-account', demoName)
-      setLoadingExpenses(true)
-      setLoadingRent(true)
-      toast({ title: 'Connected to QuickBooks (demo)', description: demoName, duration: 2000 })
-      await loadExpenses()
-      await loadRentPayments()
-      toast({ title: 'QuickBooks sync complete.', duration: 2000 })
-      return
-    }
-
-    // If connected, call the server proxy to fetch fresh data from QuickBooks
-    try {
+      // If authenticated, sync QuickBooks to Yardi
       toast({ title: 'Starting sync from QuickBooks...', duration: 2000 })
       setLoadingExpenses(true)
       setLoadingRent(true)
 
-      const query = 'SELECT * FROM Bill STARTPOSITION 1 MAXRESULTS 20'
-      const res = await fetch('/api/quickbooks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      })
-
-      const json = await res.json()
-      if (!res.ok || !json.ok) {
-        const msg = json?.message || 'QuickBooks sync failed'
-        toast({ title: 'QuickBooks sync failed', description: String(msg), duration: 4000 })
+      // Get date range for sync
+      const { from, to } = getDateRange()
+      
+      const syncOperation = await DataService.syncQuickBooksToYardi('all', from, to, 'DEFAULT')
+      
+      if (syncOperation.status === 'completed') {
+        toast({ 
+          title: 'QuickBooks sync completed successfully', 
+          description: `Processed ${syncOperation.recordsProcessed || 0} records`,
+          duration: 3000 
+        })
+      } else if (syncOperation.status === 'failed') {
+        toast({ 
+          title: 'QuickBooks sync failed', 
+          description: syncOperation.message,
+          duration: 4000 
+        })
       } else {
-        // Provide lightweight feedback. Mapping QBO -> app models is a separate step.
-        const count = json?.data?.QueryResponse?.Bill?.length ?? 0
-        toast({ title: 'QuickBooks sync finished', description: `${count} bills fetched`, duration: 3000 })
+        toast({ 
+          title: 'QuickBooks sync in progress', 
+          description: syncOperation.message,
+          duration: 3000 
+        })
       }
 
-      // Refresh UI (data-service still returns mock data unless adapted)
+      // Refresh the data
       await loadExpenses()
       await loadRentPayments()
-    } catch (err: any) {
-      console.error('QuickBooks sync error', err)
-      toast({ title: 'QuickBooks sync error', description: String(err?.message || err), duration: 4000 })
+    } catch (error) {
+      console.error('QuickBooks sync error:', error)
+      toast({ 
+        title: 'QuickBooks sync error', 
+        description: error instanceof Error ? error.message : 'Unknown error',
+        duration: 4000 
+      })
+    } finally {
+      setLoadingExpenses(false)
+      setLoadingRent(false)
     }
   }
 
