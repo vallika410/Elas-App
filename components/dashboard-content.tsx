@@ -25,6 +25,10 @@ export function DashboardContent() {
   const [loadingRent, setLoadingRent] = useState(true)
   const { toast } = useToast()
 
+  // New states to manage global sync overlay and message
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState("")
+
   useEffect(() => {
     loadExpenses()
   }, [expenseSearch, dateRange])
@@ -69,6 +73,9 @@ export function DashboardContent() {
 
   const handleSyncYardi = async () => {
     try {
+      // show global sync overlay
+      setSyncing(true)
+      setSyncMessage("Loading from Yardi...")
       toast({ title: 'Starting sync from Yardi...', duration: 2000 })
       setLoadingExpenses(true)
       setLoadingRent(true)
@@ -136,11 +143,17 @@ export function DashboardContent() {
     } finally {
       setLoadingExpenses(false)
       setLoadingRent(false)
+      // hide global sync overlay
+      setSyncing(false)
+      setSyncMessage("")
     }
   }
 
   const handleSyncQuickBooks = async () => {
     try {
+      // show global sync overlay
+      setSyncing(true)
+      setSyncMessage("Loading from QuickBooks...")
       // Check authentication status first
       const authStatus = await DataService.getAuthStatus()
       
@@ -149,6 +162,9 @@ export function DashboardContent() {
         const authUrl = await DataService.initiateQuickBooksAuth('sandbox')
         window.open(authUrl, '_blank', 'width=600,height=700')
         toast({ title: 'Opened QuickBooks connect window', duration: 3000 })
+        // If auth window opened, stop the overlay so user can interact if needed
+        setSyncing(false)
+        setSyncMessage("")
         return
       }
 
@@ -195,6 +211,9 @@ export function DashboardContent() {
     } finally {
       setLoadingExpenses(false)
       setLoadingRent(false)
+      // hide global sync overlay
+      setSyncing(false)
+      setSyncMessage("")
     }
   }
 
@@ -227,208 +246,226 @@ export function DashboardContent() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
-          <p className="text-sm text-neutral-500 mt-1">QuickBooks data synced from approved transactions</p>
-        </div>
+    <div className="relative">
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
+            <p className="text-sm text-neutral-500 mt-1">QuickBooks data synced from approved transactions</p>
+          </div>
 
-        <div className="mt-2 sm:mt-0 flex items-center gap-3">
-          <Button size="sm" variant="outline" onClick={handleSyncYardi}>
-            Sync from Yardi
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleSyncQuickBooks}>
-            Sync from QuickBooks
-          </Button>
-        </div>
-      </div>
-
-      {/* Expenses Section */}
-      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm">
-        <div className="p-6 border-b border-neutral-200">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <h2 className="text-lg font-medium text-neutral-900">Expenses (Vendor Bills)</h2>
-            <div className="flex items-center gap-3">
-              <div className="flex gap-2">
-                <Button
-                  variant={dateRange === "this-month" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDateRange("this-month")}
-                >
-                  This month
-                </Button>
-                <Button
-                  variant={dateRange === "last-month" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDateRange("last-month")}
-                >
-                  Last month
-                </Button>
-              </div>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                <Input
-                  placeholder="Search..."
-                  value={expenseSearch}
-                  onChange={(e) => setExpenseSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-            </div>
+          <div className="mt-2 sm:mt-0 flex items-center gap-3">
+            <Button size="sm" variant="outline" onClick={handleSyncYardi} disabled={syncing}>
+              Sync from Yardi
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleSyncQuickBooks} disabled={syncing}>
+              Sync from QuickBooks
+            </Button>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-neutral-50 border-b border-neutral-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Vendor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Doc #
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Due
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-neutral-200">
-              {loadingExpenses ? (
+        {/* Expenses Section */}
+        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm">
+          <div className="p-6 border-b border-neutral-200">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <h2 className="text-lg font-medium text-neutral-900">Expenses (Vendor Bills)</h2>
+              <div className="flex items-center gap-3">
+                <div className="flex gap-2">
+                  <Button
+                    variant={dateRange === "this-month" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDateRange("this-month")}
+                  >
+                    This month
+                  </Button>
+                  <Button
+                    variant={dateRange === "last-month" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDateRange("last-month")}
+                  >
+                    Last month
+                  </Button>
+                </div>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <Input
+                    placeholder="Search..."
+                    value={expenseSearch}
+                    onChange={(e) => setExpenseSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-neutral-50 border-b border-neutral-200">
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
-                    Loading...
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Vendor
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Doc #
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Due
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Status
+                  </th>
                 </tr>
-              ) : expenses.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
-                    No expenses found
-                  </td>
-                </tr>
-              ) : (
-                expenses.map((expense) => (
-                  <tr key={expense.id} className="hover:bg-neutral-50">
-                    <td className="px-6 py-4 text-sm text-neutral-900">{expense.vendorName}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{expense.docNumber}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{formatDate(expense.dueDate)}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-900 text-right font-medium">
-                      {formatCurrency(expense.amount)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge variant="secondary" className={getStatusColor(expense.status)}>
-                        {expense.status}
-                      </Badge>
+              </thead>
+              <tbody className="bg-white divide-y divide-neutral-200">
+                {loadingExpenses ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
+                      Loading...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Rent Payments Section */}
-      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm">
-        <div className="p-6 border-b border-neutral-200">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <h2 className="text-lg font-medium text-neutral-900">Rent Payments</h2>
-            <div className="flex items-center gap-3">
-              <div className="flex gap-2">
-                <Button
-                  variant={dateRange === "this-month" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDateRange("this-month")}
-                >
-                  This month
-                </Button>
-                <Button
-                  variant={dateRange === "last-month" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDateRange("last-month")}
-                >
-                  Last month
-                </Button>
-              </div>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                <Input
-                  placeholder="Search..."
-                  value={rentSearch}
-                  onChange={(e) => setRentSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-neutral-50 border-b border-neutral-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Tenant
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Reference
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
-                  Applied Invoice
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-neutral-200">
-              {loadingRent ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
-                    Loading...
-                  </td>
-                </tr>
-              ) : rentPayments.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
-                    No rent payments found
-                  </td>
-                </tr>
-              ) : (
-                rentPayments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-neutral-50">
-                    <td className="px-6 py-4 text-sm text-neutral-900">{payment.tenantName}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{formatDate(payment.paymentDate)}</td>
-                    <td className="px-6 py-4 text-sm text-neutral-900 text-right font-medium">
-                      {formatCurrency(payment.amount)}
+                ) : expenses.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
+                      No expenses found
                     </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{payment.reference}</td>
-                    <td className="px-6 py-4">
-                      {payment.appliedInvoice ? (
-                        <Badge variant="secondary" className="bg-green-100 text-green-800">
-                          {payment.appliedInvoice}
+                  </tr>
+                ) : (
+                  expenses.map((expense) => (
+                    <tr key={expense.id} className="hover:bg-neutral-50">
+                      <td className="px-6 py-4 text-sm text-neutral-900">{expense.vendorName}</td>
+                      <td className="px-6 py-4 text-sm text-neutral-600">{expense.docNumber}</td>
+                      <td className="px-6 py-4 text-sm text-neutral-600">{formatDate(expense.dueDate)}</td>
+                      <td className="px-6 py-4 text-sm text-neutral-900 text-right font-medium">
+                        {formatCurrency(expense.amount)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge variant="secondary" className={getStatusColor(expense.status)}>
+                          {expense.status}
                         </Badge>
-                      ) : (
-                        <span className="text-sm text-neutral-400">—</span>
-                      )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Rent Payments Section */}
+        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm">
+          <div className="p-6 border-b border-neutral-200">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <h2 className="text-lg font-medium text-neutral-900">Rent Payments</h2>
+              <div className="flex items-center gap-3">
+                <div className="flex gap-2">
+                  <Button
+                    variant={dateRange === "this-month" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDateRange("this-month")}
+                  >
+                    This month
+                  </Button>
+                  <Button
+                    variant={dateRange === "last-month" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDateRange("last-month")}
+                  >
+                    Last month
+                  </Button>
+                </div>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <Input
+                    placeholder="Search..."
+                    value={rentSearch}
+                    onChange={(e) => setRentSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-neutral-50 border-b border-neutral-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Tenant
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Reference
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Applied Invoice
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-neutral-200">
+                {loadingRent ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
+                      Loading...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : rentPayments.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
+                      No rent payments found
+                    </td>
+                  </tr>
+                ) : (
+                  rentPayments.map((payment) => (
+                    <tr key={payment.id} className="hover:bg-neutral-50">
+                      <td className="px-6 py-4 text-sm text-neutral-900">{payment.tenantName}</td>
+                      <td className="px-6 py-4 text-sm text-neutral-600">{formatDate(payment.paymentDate)}</td>
+                      <td className="px-6 py-4 text-sm text-neutral-900 text-right font-medium">
+                        {formatCurrency(payment.amount)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-neutral-600">{payment.reference}</td>
+                      <td className="px-6 py-4">
+                        {payment.appliedInvoice ? (
+                          <Badge variant="secondary" className="bg-green-100 text-green-800">
+                            {payment.appliedInvoice}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-neutral-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      {/* Overlay that blocks interaction and blurs page while syncing */}
+      {syncing && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/60 pointer-events-auto"
+          // aria-hidden={syncing ? "true" : "false"}
+        >
+          <div className="flex items-center gap-4 bg-white/80 rounded-md p-4 shadow">
+            <div className="w-8 h-8 border-4 border-t-blue-600 border-neutral-200 rounded-full animate-spin" />
+            <div>
+              <div className="text-lg font-medium text-neutral-900">{syncMessage}</div>
+              <div className="text-sm text-neutral-600">Please wait…</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
