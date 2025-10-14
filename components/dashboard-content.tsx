@@ -9,6 +9,7 @@ import { Search } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 type DateRange = "this-month" | "last-month"
+import Image from "next/image"
 
 export function DashboardContent() {
   const [dateRange, setDateRange] = useState<DateRange>(() => {
@@ -256,10 +257,10 @@ export function DashboardContent() {
 
           <div className="mt-2 sm:mt-0 flex items-center gap-3">
             <Button size="sm" variant="outline" onClick={handleSyncYardi} disabled={syncing}>
-              Sync from Yardi
+              Sync from <Image src="/Yardi.svg" alt="Yardi"  className="object-contain" priority width={20} height={20}/>
             </Button>
             <Button size="sm" variant="outline" onClick={handleSyncQuickBooks} disabled={syncing}>
-              Sync from QuickBooks
+              Sync from <Image src="/quickbooks.svg" alt="QuickBooks"  className="object-contain" priority width={20} height={20}/>
             </Button>
           </div>
         </div>
@@ -455,7 +456,7 @@ export function DashboardContent() {
       {syncing && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/60 pointer-events-auto"
-          // aria-hidden={syncing ? "true" : "false"}
+         // aria-hidden={syncing ? "true" : "false"}
         >
           <div className="flex items-center gap-4 bg-white/80 rounded-md p-4 shadow">
             <div className="w-8 h-8 border-4 border-t-blue-600 border-neutral-200 rounded-full animate-spin" />
