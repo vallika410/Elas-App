@@ -168,6 +168,45 @@ export function SettingsContent() {
       <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
 
       <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-6 space-y-8">
+         {/* QuickBooks Integration */}
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-base font-medium text-neutral-900">
+              QuickBooks Integration
+            </h3>
+            <p className="text-sm text-neutral-500 mt-1">
+              Connect your QuickBooks account to sync vendor bills and payments
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              {qbConnected ? (
+                <div className="text-sm text-neutral-700">
+                  Connected:{" "}
+                  <span className="font-medium">{qbAccountName}</span>
+                </div>
+              ) : (
+                <div className="text-sm text-neutral-500">Not connected</div>
+              )}
+            </div>
+
+            {qbConnected ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDisconnectQuickBooks}>
+                Disconnect
+              </Button>
+            ) : (
+              <Button size="sm" onClick={handleConnectQuickBooks}>
+                Connect QuickBooks
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="border-t border-neutral-200" />
+
         {/* Default Date Range */}
         <div className="space-y-4">
           <div>
@@ -212,38 +251,6 @@ export function SettingsContent() {
           </div>
         </div>
       </div>
-
-        <div className="border-t border-neutral-200" />
-
-        {/* QuickBooks Integration */}
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-base font-medium text-neutral-900">QuickBooks Integration</h3>
-            <p className="text-sm text-neutral-500 mt-1">Connect your QuickBooks account to sync vendor bills and payments</p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              {qbConnected ? (
-                <div className="text-sm text-neutral-700">
-                  Connected: <span className="font-medium">{qbAccountName}</span>
-                </div>
-              ) : (
-                <div className="text-sm text-neutral-500">Not connected</div>
-              )}
-            </div>
-
-            {qbConnected ? (
-              <Button variant="destructive" size="sm" onClick={handleDisconnectQuickBooks}>
-                Disconnect
-              </Button>
-            ) : (
-              <Button size="sm" onClick={handleConnectQuickBooks}>
-                Connect QuickBooks
-              </Button>
-            )}
-          </div>
-        </div>
     </div>
   )
 }
