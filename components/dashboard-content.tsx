@@ -7,17 +7,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
-type DateRange = "this-month" | "last-month"
 import Image from "next/image"
+import { fr } from "date-fns/locale"
 
 export function DashboardContent() {
-  const [dateRange, setDateRange] = useState<DateRange>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("elas-date-range") as DateRange) || "this-month"
-    }
-    return "this-month"
-  })
+  // Separate date ranges for Expenses and Rent sections
+  const [fromDate, setFromDate] = useState<string>("")
+  const [toDate, setToDate] = useState<string>("")
+
   const [expenseSearch, setExpenseSearch] = useState("")
   const [rentSearch, setRentSearch] = useState("")
   const [expenses, setExpenses] = useState<ExpenseInvoice[]>([])
@@ -32,28 +29,27 @@ export function DashboardContent() {
 
   useEffect(() => {
     loadExpenses()
-  }, [expenseSearch, dateRange])
+  }, [expenseSearch, fromDate, toDate])
 
   useEffect(() => {
     loadRentPayments()
-  }, [rentSearch, dateRange])
+  }, [rentSearch, fromDate, toDate])
 
   const getDateRange = () => {
     const now = new Date()
-    let from: Date, to: Date
+    let from = fromDate
+    let to = toDate
 
-    if (dateRange === "this-month") {
-      from = new Date(now.getFullYear(), now.getMonth(), 1)
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    } else {
-      from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      to = new Date(now.getFullYear(), now.getMonth(), 0)
+    if (!from) {
+      const f = new Date(now.getFullYear(), now.getMonth(), 1)
+      from = f.toISOString().split("T")[0]
+    }
+    if (!to) {
+      const t = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      to = t.toISOString().split("T")[0]
     }
 
-    return {
-      from: from.toISOString().split("T")[0],
-      to: to.toISOString().split("T")[0],
-    }
+    return { from, to }
   }
 
   const loadExpenses = async () => {
@@ -271,23 +267,33 @@ export function DashboardContent() {
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <h2 className="text-lg font-medium text-neutral-900">Expenses (Vendor Bills)</h2>
               <div className="flex items-center gap-3">
+                {/* Date pickers to choose the range for the table */}
                 <div className="flex gap-2">
-                  <Button
-                    variant={dateRange === "this-month" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setDateRange("this-month")}
-                  >
-                    This month
-                  </Button>
-                  <Button
-                    variant={dateRange === "last-month" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setDateRange("last-month")}
-                  >
-                    Last month
-                  </Button>
+                  <label className="flex flex-col text-sm">
+                    <span className="text-neutral-500 text-xs">From</span>
+                    <Input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="w-auto rounded-md border border-neutral-200 px-2 py-1 bg-white text-sm"
+                      aria-label="Expenses from date (YYYY-MM-DD)"
+                      style={{ textTransform: "none" }}
+                    />
+                  </label>
+                  <div className="text-neutral-400 self-center">—</div>
+                  <label className="flex flex-col text-sm">
+                    <span className="text-neutral-500 text-xs">To</span>
+                    <Input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="w-auto rounded-md border border-neutral-200 px-2 py-1 bg-white text-sm"
+                      aria-label="Expenses to date (YYYY-MM-DD)"
+                      style={{ textTransform: "none" }}
+                    />
+                  </label>
                 </div>
-                <div className="relative w-64">
+                <div className="relative w-64 top-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                   <Input
                     placeholder="Search..."
@@ -362,23 +368,33 @@ export function DashboardContent() {
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <h2 className="text-lg font-medium text-neutral-900">Rent Payments</h2>
               <div className="flex items-center gap-3">
-                <div className="flex gap-2">
-                  <Button
-                    variant={dateRange === "this-month" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setDateRange("this-month")}
-                  >
-                    This month
-                  </Button>
-                  <Button
-                    variant={dateRange === "last-month" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setDateRange("last-month")}
-                  >
-                    Last month
-                  </Button>
+                {/* Same date pickers used for rent payments */}
+                <div className="flex items-end gap-3">
+                  <label className="flex flex-col text-sm">
+                    <span className="text-neutral-500 text-xs">From</span>
+                    <Input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="w-auto rounded-md border border-neutral-200 px-2 py-1 bg-white text-sm"
+                      aria-label="Rent from date (YYYY-MM-DD)"
+                      style={{ textTransform: "none" }}
+                    />
+                  </label>
+                  <div className="text-neutral-400 self-center">—</div>
+                  <label className="flex flex-col text-sm">
+                    <span className="text-neutral-500 text-xs">To</span>
+                    <Input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="w-auto rounded-md border border-neutral-200 px-2 py-1 bg-white text-sm"
+                      aria-label="Rent to date (YYYY-MM-DD)"
+                      style={{ textTransform: "none" }}
+                    />
+                  </label>
                 </div>
-                <div className="relative w-64">
+                <div className="relative w-64 top-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                   <Input
                     placeholder="Search..."
@@ -456,7 +472,7 @@ export function DashboardContent() {
       {syncing && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/60 pointer-events-auto"
-         // aria-hidden={syncing ? "true" : "false"}
+          // aria-hidden={syncing ? "true" : "false"}
         >
           <div className="flex items-center gap-4 bg-white/80 rounded-md p-4 shadow">
             <div className="w-8 h-8 border-4 border-t-blue-600 border-neutral-200 rounded-full animate-spin" />
