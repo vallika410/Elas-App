@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { Search } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
-import { fr } from "date-fns/locale"
 
 export function DashboardContent() {
   // Separate date ranges for Expenses and Rent sections
@@ -19,6 +18,10 @@ export function DashboardContent() {
   const [rentSearch, setRentSearch] = useState("")
   const [expenses, setExpenses] = useState<ExpenseInvoice[]>([])
   const [rentPayments, setRentPayments] = useState<RentPayment[]>([])
+  // Pagination state: default rows per page
+  const PAGE_SIZE = 10
+  const [expensePage, setExpensePage] = useState(0)
+  const [rentPage, setRentPage] = useState(0)
   const [loadingExpenses, setLoadingExpenses] = useState(true)
   const [loadingRent, setLoadingRent] = useState(true)
   const { toast } = useToast()
@@ -28,10 +31,14 @@ export function DashboardContent() {
   const [syncMessage, setSyncMessage] = useState("")
 
   useEffect(() => {
+    // reset to first page when search or date range changes
+    setExpensePage(0)
     loadExpenses()
   }, [expenseSearch, fromDate, toDate])
 
   useEffect(() => {
+    // reset to first page when search or date range changes
+    setRentPage(0)
     loadRentPayments()
   }, [rentSearch, fromDate, toDate])
 
@@ -242,6 +249,10 @@ export function DashboardContent() {
     }
   }
 
+  // Pagination helpers
+  const expenseTotalPages = Math.max(1, Math.ceil(expenses.length / PAGE_SIZE))
+  const rentTotalPages = Math.max(1, Math.ceil(rentPayments.length / PAGE_SIZE))
+
   return (
     <div className="relative">
       <div className="space-y-6">
@@ -341,7 +352,10 @@ export function DashboardContent() {
                     </td>
                   </tr>
                 ) : (
-                  expenses.map((expense) => (
+                  // show only the current page of expenses
+                  expenses
+                    .slice(expensePage * PAGE_SIZE, expensePage * PAGE_SIZE + PAGE_SIZE)
+                    .map((expense) => (
                     <tr key={expense.id} className="hover:bg-neutral-50">
                       <td className="px-6 py-4 text-sm text-neutral-900">{expense.vendorName}</td>
                       <td className="px-6 py-4 text-sm text-neutral-600">{expense.docNumber}</td>
@@ -359,6 +373,25 @@ export function DashboardContent() {
                 )}
               </tbody>
             </table>
+          </div>
+          {/* Pagination controls for expenses */}
+          <div className="p-4 border-t border-neutral-100 flex items-center justify-between">
+            <div className="text-sm text-neutral-500">
+              Showing {expenses.length === 0 ? 0 : expensePage * PAGE_SIZE + 1} - {Math.min(expenses.length, (expensePage + 1) * PAGE_SIZE)} of {expenses.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setExpensePage((p) => Math.max(0, p - 1))} disabled={expensePage === 0}>
+                Prev
+              </Button>
+              {Array.from({ length: expenseTotalPages }, (_, i) => (
+                <Button key={i} size="sm" variant={i === expensePage ? undefined : "outline"} onClick={() => setExpensePage(i)}>
+                  {i + 1}
+                </Button>
+              ))}
+              <Button size="sm" variant="outline" onClick={() => setExpensePage((p) => Math.min(expenseTotalPages - 1, p + 1))} disabled={expensePage >= expenseTotalPages - 1}>
+                Next
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -442,7 +475,10 @@ export function DashboardContent() {
                     </td>
                   </tr>
                 ) : (
-                  rentPayments.map((payment) => (
+                  // show only the current page of rent payments
+                  rentPayments
+                    .slice(rentPage * PAGE_SIZE, rentPage * PAGE_SIZE + PAGE_SIZE)
+                    .map((payment) => (
                     <tr key={payment.id} className="hover:bg-neutral-50">
                       <td className="px-6 py-4 text-sm text-neutral-900">{payment.tenantName}</td>
                       <td className="px-6 py-4 text-sm text-neutral-600">{formatDate(payment.paymentDate)}</td>
@@ -464,6 +500,25 @@ export function DashboardContent() {
                 )}
               </tbody>
             </table>
+          </div>
+          {/* Pagination controls for rent payments */}
+          <div className="p-4 border-t border-neutral-100 flex items-center justify-between">
+            <div className="text-sm text-neutral-500">
+              Showing {rentPayments.length === 0 ? 0 : rentPage * PAGE_SIZE + 1} - {Math.min(rentPayments.length, (rentPage + 1) * PAGE_SIZE)} of {rentPayments.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setRentPage((p) => Math.max(0, p - 1))} disabled={rentPage === 0}>
+                Prev
+              </Button>
+              {Array.from({ length: rentTotalPages }, (_, i) => (
+                <Button key={i} size="sm" variant={i === rentPage ? undefined : "outline"} onClick={() => setRentPage(i)}>
+                  {i + 1}
+                </Button>
+              ))}
+              <Button size="sm" variant="outline" onClick={() => setRentPage((p) => Math.min(rentTotalPages - 1, p + 1))} disabled={rentPage >= rentTotalPages - 1}>
+                Next
+              </Button>
+            </div>
           </div>
         </div>
       </div>
