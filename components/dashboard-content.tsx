@@ -5,8 +5,10 @@ import { DataService, type ExpenseInvoice, type RentPayment } from "@/lib/data-s
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search } from "lucide-react"
+import { Search, Info } from "lucide-react"
+import { format, formatDistanceToNow } from 'date-fns'
 import { useToast } from "@/hooks/use-toast"
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import Image from "next/image"
 
 export function DashboardContent() {
@@ -29,6 +31,10 @@ export function DashboardContent() {
   // New states to manage global sync overlay and message
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState("")
+  // State for last sync timestamps
+  const [lastYardiSync, setLastYardiSync] = useState<string | null>(null)
+  const [lastQuickBooksSync, setLastQuickBooksSync] = useState<string | null>(null)
+  // Tooltip-controlled exact-time display (Radix Tooltip handles placement, focus and outside click)
 
   useEffect(() => {
     // reset to first page when search or date range changes
@@ -41,6 +47,18 @@ export function DashboardContent() {
     setRentPage(0)
     loadRentPayments()
   }, [rentSearch, fromDate, toDate])
+
+  // load last sync timestamps from localStorage on mount
+  useEffect(() => {
+    try {
+      const y = localStorage.getItem('lastYardiSync')
+      const q = localStorage.getItem('lastQuickBooksSync')
+      setLastYardiSync(y)
+      setLastQuickBooksSync(q)
+    } catch (e) {
+      // ignore localStorage errors in SSR/privileged contexts
+    }
+  }, [])
 
   const getDateRange = () => {
     const now = new Date()
@@ -80,6 +98,10 @@ export function DashboardContent() {
       // show global sync overlay
       setSyncing(true)
       setSyncMessage("Loading from Yardi...")
+      // update last sync timestamp now so UI reflects action
+      const now = new Date().toISOString()
+      setLastYardiSync(now)
+      try { localStorage.setItem('lastYardiSync', now) } catch (e) {}
       toast({ title: 'Starting sync from Yardi...', duration: 2000 })
       setLoadingExpenses(true)
       setLoadingRent(true)
@@ -158,6 +180,10 @@ export function DashboardContent() {
       // show global sync overlay
       setSyncing(true)
       setSyncMessage("Loading from QuickBooks...")
+      // update last QuickBooks sync timestamp immediately
+      const now = new Date().toISOString()
+      setLastQuickBooksSync(now)
+      try { localStorage.setItem('lastQuickBooksSync', now) } catch (e) {}
       // Check authentication status first
       const authStatus = await DataService.getAuthStatus()
       
@@ -236,6 +262,22 @@ export function DashboardContent() {
     })
   }
 
+  const formatShortTimestamp = (dateStr: string) => {
+    try {
+      return format(new Date(dateStr), 'MMM d, yyyy h:mm a')
+    } catch (e) {
+      return dateStr
+    }
+  }
+
+  const formatRelativeTime = (dateStr: string) => {
+    try {
+      return formatDistanceToNow(new Date(dateStr), { addSuffix: true })
+    } catch (e) {
+      return dateStr
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "paid":
@@ -252,6 +294,19 @@ export function DashboardContent() {
   // Pagination helpers
   const expenseTotalPages = Math.max(1, Math.ceil(expenses.length / PAGE_SIZE))
   const rentTotalPages = Math.max(1, Math.ceil(rentPayments.length / PAGE_SIZE))
+  // limit number of visible page buttons - slide window when total pages exceed this
+  const MAX_PAGE_BUTTONS = 5
+  const computeWindow = (current: number, total: number) => {
+    if (total <= MAX_PAGE_BUTTONS) return { start: 0, end: total - 1 }
+    // sliding window: start at current page, but clamp so we don't overflow
+    let start = current
+    if (start < 0) start = 0
+    if (start + MAX_PAGE_BUTTONS > total) start = total - MAX_PAGE_BUTTONS
+    const end = start + MAX_PAGE_BUTTONS - 1
+    return { start, end }
+  }
+  const expenseWindow = computeWindow(expensePage, expenseTotalPages)
+  const rentWindow = computeWindow(rentPage, rentTotalPages)
 
   return (
     <div className="relative">
@@ -262,13 +317,56 @@ export function DashboardContent() {
             <p className="text-sm text-neutral-500 mt-1">QuickBooks data synced from approved transactions</p>
           </div>
 
-          <div className="mt-2 sm:mt-0 flex items-center gap-3">
-            <Button size="sm" variant="outline" onClick={handleSyncYardi} disabled={syncing}>
-              Sync from <Image src="/Yardi.svg" alt="Yardi"  className="object-contain" priority width={20} height={20}/>
-            </Button>
-            <Button size="sm" variant="outline" onClick={handleSyncQuickBooks} disabled={syncing}>
-              Sync from <Image src="/quickbooks.svg" alt="QuickBooks"  className="object-contain" priority width={20} height={20}/>
-            </Button>
+          <div className="mt-2 sm:mt-0 flex items-center gap-6">
+            <div className="flex flex-col items-center">
+              <Button size="sm" variant="outline" onClick={handleSyncYardi} disabled={syncing}>
+                Sync from Yardi<Image src="/Yardi.svg" alt="Yardi"  className="object-contain" priority width={20} height={20}/>
+              </Button>
+              <div className="relative mt-1">
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-neutral-500">{lastYardiSync ? `Last Sync: ${formatRelativeTime(lastYardiSync)}` : 'Never'}</div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        aria-label="Show exact Yardi sync time"
+                        className="p-1 rounded-sm text-neutral-400 hover:text-neutral-600"
+                        type="button"
+                      >
+                        <Info className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6}>
+                      {lastYardiSync ? formatShortTimestamp(lastYardiSync) : 'Never'}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center">
+              <Button size="sm" variant="outline" onClick={handleSyncQuickBooks} disabled={syncing}>
+                Sync from Quickbooks<Image src="/quickbooks.svg" alt="QuickBooks"  className="object-contain" priority width={20} height={20}/>
+              </Button>
+              <div className="relative mt-1">
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-neutral-500">{lastQuickBooksSync ? `Last Sync: ${formatRelativeTime(lastQuickBooksSync)}` : 'Never'}</div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        aria-label="Show exact QuickBooks sync time"
+                        className="p-1 rounded-sm text-neutral-400 hover:text-neutral-600"
+                        type="button"
+                      >
+                        <Info className="w-3 h-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6} >
+                      {lastQuickBooksSync ? formatShortTimestamp(lastQuickBooksSync) : 'Never'}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -383,9 +481,16 @@ export function DashboardContent() {
               <Button size="sm" variant="outline" onClick={() => setExpensePage((p) => Math.max(0, p - 1))} disabled={expensePage === 0}>
                 Prev
               </Button>
-              {Array.from({ length: expenseTotalPages }, (_, i) => (
-                <Button key={i} size="sm" variant={i === expensePage ? undefined : "outline"} onClick={() => setExpensePage(i)}>
-                  {i + 1}
+              {Array.from({ length: expenseWindow.end - expenseWindow.start + 1 }, (_, i) => expenseWindow.start + i).map((p) => (
+                <Button
+                  key={p}
+                  size="sm"
+                  variant={p === expensePage ? undefined : "outline"}
+                  onClick={() => setExpensePage(p)}
+                  aria-current={p === expensePage ? 'page' : undefined}
+                  aria-label={`Go to page ${p + 1}`}
+                >
+                  {p + 1}
                 </Button>
               ))}
               <Button size="sm" variant="outline" onClick={() => setExpensePage((p) => Math.min(expenseTotalPages - 1, p + 1))} disabled={expensePage >= expenseTotalPages - 1}>
@@ -510,9 +615,16 @@ export function DashboardContent() {
               <Button size="sm" variant="outline" onClick={() => setRentPage((p) => Math.max(0, p - 1))} disabled={rentPage === 0}>
                 Prev
               </Button>
-              {Array.from({ length: rentTotalPages }, (_, i) => (
-                <Button key={i} size="sm" variant={i === rentPage ? undefined : "outline"} onClick={() => setRentPage(i)}>
-                  {i + 1}
+              {Array.from({ length: rentWindow.end - rentWindow.start + 1 }, (_, i) => rentWindow.start + i).map((p) => (
+                <Button
+                  key={p}
+                  size="sm"
+                  variant={p === rentPage ? undefined : "outline"}
+                  onClick={() => setRentPage(p)}
+                  aria-current={p === rentPage ? 'page' : undefined}
+                  aria-label={`Go to page ${p + 1}`}
+                >
+                  {p + 1}
                 </Button>
               ))}
               <Button size="sm" variant="outline" onClick={() => setRentPage((p) => Math.min(rentTotalPages - 1, p + 1))} disabled={rentPage >= rentTotalPages - 1}>
@@ -527,7 +639,6 @@ export function DashboardContent() {
       {syncing && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/60 pointer-events-auto"
-          // aria-hidden={syncing ? "true" : "false"}
         >
           <div className="flex items-center gap-4 bg-white/80 rounded-md p-4 shadow">
             <div className="w-8 h-8 border-4 border-t-blue-600 border-neutral-200 rounded-full animate-spin" />
