@@ -98,10 +98,6 @@ export function DashboardContent() {
       // show global sync overlay
       setSyncing(true)
       setSyncMessage("Loading from Yardi...")
-      // update last sync timestamp now so UI reflects action
-      const now = new Date().toISOString()
-      setLastYardiSync(now)
-      try { localStorage.setItem('lastYardiSync', now) } catch (e) {}
       toast({ title: 'Starting sync from Yardi...', duration: 2000 })
       setLoadingExpenses(true)
       setLoadingRent(true)
@@ -148,6 +144,10 @@ export function DashboardContent() {
           description: `Synced ${completedSyncs.join(' and ')}. Total: ${totalRecords} records`,
           duration: 3000 
         })
+        // record the last successful sync time
+        const successTime = new Date().toISOString()
+        setLastYardiSync(successTime)
+        try { localStorage.setItem('lastYardiSync', successTime) } catch (e) {}
       } else {
         toast({ 
           title: 'Yardi sync in progress', 
@@ -180,10 +180,6 @@ export function DashboardContent() {
       // show global sync overlay
       setSyncing(true)
       setSyncMessage("Loading from QuickBooks...")
-      // update last QuickBooks sync timestamp immediately
-      const now = new Date().toISOString()
-      setLastQuickBooksSync(now)
-      try { localStorage.setItem('lastQuickBooksSync', now) } catch (e) {}
       // Check authentication status first
       const authStatus = await DataService.getAuthStatus()
       
@@ -214,6 +210,9 @@ export function DashboardContent() {
           description: `Processed ${syncOperation.recordsProcessed || 0} records`,
           duration: 3000 
         })
+        const successTime = new Date().toISOString()
+        setLastQuickBooksSync(successTime)
+        try { localStorage.setItem('lastQuickBooksSync', successTime) } catch (e) {}
       } else if (syncOperation.status === 'failed') {
         toast({ 
           title: 'QuickBooks sync failed', 
