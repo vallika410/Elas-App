@@ -147,7 +147,10 @@ export function DashboardContent() {
           description: 'Both bills and receipts sync failed',
           duration: 5000 
         })
-      } else if (failedSyncs.length === 1) {
+      } else if (billsFailed || receiptsFailed) {
+        const parts: string[] = []
+        if (!billsFailed && billsCount > 0) parts.push(`Bills (${billsCount} records)`)
+        if (!receiptsFailed && receiptsCount > 0) parts.push(`Receipts (${receiptsCount} records)`)
         toast({ 
           title: 'Partial sync completed', 
           description: `${failedSyncs[0]} sync failed, but ${completedSyncs.join(' and ')} completed successfully`,
