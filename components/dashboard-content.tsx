@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Search, Info } from "lucide-react"
 import { format, formatDistanceToNow } from 'date-fns'
 import { useToast } from "@/hooks/use-toast"
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import Image from "next/image"
 
 export function DashboardContent() {
@@ -98,7 +98,6 @@ export function DashboardContent() {
       // show global sync overlay
       setSyncing(true)
       setSyncMessage("Loading from Yardi...")
-      toast({ title: 'Starting sync from Yardi...', duration: 2000 })
       setLoadingExpenses(true)
       setLoadingRent(true)
 
@@ -107,6 +106,9 @@ export function DashboardContent() {
         DataService.syncYardiToQuickBooks('bills', 'chabot'),
         DataService.syncYardiToQuickBooks('receipts', 'chabot')
       ])
+      
+      console.log('Bills sync result:', billsSync)
+      console.log('Receipts sync result:', receiptsSync)
       
       // Check results for both syncs
       const totalRecords = (billsSync.recordsProcessed || 0) + (receiptsSync.recordsProcessed || 0)
@@ -125,53 +127,66 @@ export function DashboardContent() {
         completedSyncs.push(`Receipts (${receiptsSync.recordsProcessed || 0} records)`)
       }
       
+      // Refresh the data first
+      await loadExpenses()
+      await loadRentPayments()
+      
+      // Hide sync overlay before showing toast
+      setSyncing(false)
+      setSyncMessage("")
+      setLoadingExpenses(false)
+      setLoadingRent(false)
+      
+      // Small delay to ensure overlay is fully removed before showing toast
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
       // Show appropriate toast message
       if (failedSyncs.length === 2) {
         toast({ 
           title: 'Yardi sync failed', 
           description: 'Both bills and receipts sync failed',
-          duration: 4000 
+          duration: 5000 
         })
       } else if (failedSyncs.length === 1) {
         toast({ 
           title: 'Partial sync completed', 
           description: `${failedSyncs[0]} sync failed, but ${completedSyncs.join(' and ')} completed successfully`,
-          duration: 4000 
+          duration: 5000 
         })
       } else if (completedSyncs.length === 2) {
+        console.log('Showing success toast')
         toast({ 
           title: 'Yardi sync completed successfully', 
           description: `Synced ${completedSyncs.join(' and ')}. Total: ${totalRecords} records`,
-          duration: 3000 
+          duration: 5000 
         })
         // record the last successful sync time
         const successTime = new Date().toISOString()
         setLastYardiSync(successTime)
         try { localStorage.setItem('lastYardiSync', successTime) } catch (e) {}
       } else {
+        console.log('Sync status not completed or failed:', { billsSync, receiptsSync })
         toast({ 
-          title: 'Yardi sync in progress', 
-          description: 'Sync operations are still running',
-          duration: 3000 
+          title: 'Yardi sync completed', 
+          description: `Bills: ${billsSync.status}, Receipts: ${receiptsSync.status}. Total: ${totalRecords} records`,
+          duration: 5000 
         })
       }
-
-      // Refresh the data
-      await loadExpenses()
-      await loadRentPayments()
     } catch (error) {
       console.error('Yardi sync error:', error)
+      // Hide sync overlay
+      setSyncing(false)
+      setSyncMessage("")
+      setLoadingExpenses(false)
+      setLoadingRent(false)
+      
+      // Show error toast
+      await new Promise(resolve => setTimeout(resolve, 100))
       toast({ 
         title: 'Yardi sync error', 
         description: error instanceof Error ? error.message : 'Unknown error',
-        duration: 4000 
+        duration: 5000 
       })
-    } finally {
-      setLoadingExpenses(false)
-      setLoadingRent(false)
-      // hide global sync overlay
-      setSyncing(false)
-      setSyncMessage("")
     }
   }
 
@@ -308,6 +323,7 @@ export function DashboardContent() {
   const rentWindow = computeWindow(rentPage, rentTotalPages)
 
   return (
+    <TooltipProvider>
     <div className="relative">
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -637,7 +653,7 @@ export function DashboardContent() {
       {/* Overlay that blocks interaction and blurs page while syncing */}
       {syncing && (
         <div
-          className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/60 pointer-events-auto"
+          className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm bg-white/60 pointer-events-auto"
         >
           <div className="flex items-center gap-4 bg-white/80 rounded-md p-4 shadow">
             <div className="w-8 h-8 border-4 border-t-blue-600 border-neutral-200 rounded-full animate-spin" />
@@ -649,5 +665,6 @@ export function DashboardContent() {
         </div>
       )}
     </div>
+    </TooltipProvider>
   )
 }

@@ -1,20 +1,30 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { DataService } from "@/lib/data-service"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, XCircle, Loader2 } from "lucide-react"
 
-export default function AuthCallbackPage() {
+function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [message, setMessage] = useState('')
+  
+  // Use ref to prevent duplicate calls (React StrictMode issue)
+  const hasCalledRef = useRef(false)
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Prevent duplicate execution - authorization codes are single-use
+      if (hasCalledRef.current) {
+        console.log('⚠️  Duplicate callback prevented - code already used')
+        return
+      }
+      hasCalledRef.current = true
+      
       try {
         const code = searchParams.get('code')
         const state = searchParams.get('state')
@@ -26,6 +36,8 @@ export default function AuthCallbackPage() {
           return
         }
 
+        console.log('🔄 Exchanging authorization code for tokens...')
+        
         // Exchange code for tokens
         const success = await DataService.handleOAuthCallback(code, state, realmId)
         
@@ -60,6 +72,12 @@ export default function AuthCallbackPage() {
     }
 
     handleCallback()
+    
+    // Cleanup function to prevent any additional calls
+    return () => {
+      // Mark as called to prevent any future executions
+      hasCalledRef.current = true
+    }
   }, [searchParams, router])
 
   const handleRetry = () => {
@@ -117,5 +135,28 @@ export default function AuthCallbackPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-semibold">QuickBooks Authentication</CardTitle>
+            <CardDescription>Completing authentication...</CardDescription>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <div className="flex flex-col items-center space-y-4">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              <p className="text-sm text-neutral-600">Please wait...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
   )
 }

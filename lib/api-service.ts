@@ -172,7 +172,9 @@ export class AuthApi {
     const params = new URLSearchParams({
       code,
       state,
-      realmId
+      realmId,
+      // CRITICAL: Pass the frontend redirect URI to backend so it uses the correct URI for token exchange
+      redirect_uri: window.location.origin + '/auth/callback'
     })
     return apiClient.get<TokenResponse>(`/auth/callback?${params}`)
   }

@@ -6,12 +6,10 @@ import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Settings, LogOut, FileText, CheckCircle } from "lucide-react"
+import { LayoutDashboard, Settings, LogOut } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Imports", href: "/imports", icon: FileText },
-  { name: "Approvals", href: "/approvals", icon: CheckCircle },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
