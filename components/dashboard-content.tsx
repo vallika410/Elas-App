@@ -109,39 +109,51 @@ export function DashboardContent() {
       ])
       
       // Check results for both syncs
-      const totalRecords = (billsSync.recordsProcessed || 0) + (receiptsSync.recordsProcessed || 0)
-      const failedSyncs = []
-      const completedSyncs = []
-      
-      if (billsSync.status === 'failed') {
-        failedSyncs.push('Bills')
-      } else if (billsSync.status === 'completed') {
-        completedSyncs.push(`Bills (${billsSync.recordsProcessed || 0} records)`)
+      const getCount = (resp: any) => {
+        if (!resp) return 0
+        if (typeof resp.recordsProcessed === 'number') return resp.recordsProcessed
+        if (typeof resp.processed === 'number') return resp.processed
+        if (typeof resp.count === 'number') return resp.count
+        if (Array.isArray(resp.records)) return resp.records.length
+        if (resp.success === true) return 1
+        return 0
       }
-      
-      if (receiptsSync.status === 'failed') {
-        failedSyncs.push('Receipts')
-      } else if (receiptsSync.status === 'completed') {
-        completedSyncs.push(`Receipts (${receiptsSync.recordsProcessed || 0} records)`)
+
+      const billsCount = getCount(billsSync)
+      const receiptsCount = getCount(receiptsSync)
+      const totalRecords = billsCount + receiptsCount
+
+      const isFail = (resp: any) => {
+        if (!resp) return false
+        const s = String(resp.status || resp.state || resp.result || '').toLowerCase()
+        return s === 'failed' || s === 'error' || s === 'failed_synchronization'
       }
-      
-      // Show appropriate toast message
-      if (failedSyncs.length === 2) {
+
+      const billsFailed = isFail(billsSync)
+      const receiptsFailed = isFail(receiptsSync)
+
+      if (billsFailed && receiptsFailed) {
         toast({ 
           title: 'Yardi sync failed', 
           description: 'Both bills and receipts sync failed',
           duration: 4000 
         })
-      } else if (failedSyncs.length === 1) {
+      } else if (billsFailed || receiptsFailed) {
+        const parts: string[] = []
+        if (!billsFailed && billsCount > 0) parts.push(`Bills (${billsCount} records)`)
+        if (!receiptsFailed && receiptsCount > 0) parts.push(`Receipts (${receiptsCount} records)`)
         toast({ 
           title: 'Partial sync completed', 
-          description: `${failedSyncs[0]} sync failed, but ${completedSyncs.join(' and ')} completed successfully`,
+          description: parts.length ? `${parts.join(' and ')} completed; some parts failed` : 'Some parts failed during sync',
           duration: 4000 
         })
-      } else if (completedSyncs.length === 2) {
+      } else if (totalRecords > 0) {
+        const parts: string[] = []
+        if (billsCount > 0) parts.push(`Bills (${billsCount} records)`)
+        if (receiptsCount > 0) parts.push(`Receipts (${receiptsCount} records)`)
         toast({ 
           title: 'Yardi sync completed successfully', 
-          description: `Synced ${completedSyncs.join(' and ')}. Total: ${totalRecords} records`,
+          description: `Synced ${parts.join(' and ')}. Total: ${totalRecords} records`,
           duration: 3000 
         })
         // record the last successful sync time
