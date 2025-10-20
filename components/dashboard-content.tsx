@@ -93,6 +93,23 @@ export function DashboardContent() {
     setLoadingRent(false)
   }
 
+  // Helper functions for sync result checking (used by both Yardi and QuickBooks)
+  const getCount = (resp: any) => {
+    if (!resp) return 0
+    if (typeof resp.recordsProcessed === 'number') return resp.recordsProcessed
+    if (typeof resp.processed === 'number') return resp.processed
+    if (typeof resp.count === 'number') return resp.count
+    if (Array.isArray(resp.records)) return resp.records.length
+    if (resp.success === true) return 1
+    return 0
+  }
+
+  const isFail = (resp: any) => {
+    if (!resp) return false
+    const s = String(resp.status || resp.state || resp.result || '').toLowerCase()
+    return s === 'failed' || s === 'error' || s === 'failed_synchronization'
+  }
+
   const handleSyncYardi = async () => {
     try {
       // show global sync overlay
@@ -110,21 +127,27 @@ export function DashboardContent() {
       console.log('Bills sync result:', billsSync)
       console.log('Receipts sync result:', receiptsSync)
       
-      // Check results for both syncs
-      const totalRecords = (billsSync.recordsProcessed || 0) + (receiptsSync.recordsProcessed || 0)
+      // Use helper functions to check results
+      const billsCount = getCount(billsSync)
+      const receiptsCount = getCount(receiptsSync)
+      const totalRecords = billsCount + receiptsCount
+      
+      const billsFailed = isFail(billsSync)
+      const receiptsFailed = isFail(receiptsSync)
+      
       const failedSyncs = []
       const completedSyncs = []
       
-      if (billsSync.status === 'failed') {
+      if (billsFailed) {
         failedSyncs.push('Bills')
-      } else if (billsSync.status === 'completed') {
-        completedSyncs.push(`Bills (${billsSync.recordsProcessed || 0} records)`)
+      } else if (billsCount > 0) {
+        completedSyncs.push(`Bills (${billsCount} records)`)
       }
       
-      if (receiptsSync.status === 'failed') {
+      if (receiptsFailed) {
         failedSyncs.push('Receipts')
-      } else if (receiptsSync.status === 'completed') {
-        completedSyncs.push(`Receipts (${receiptsSync.recordsProcessed || 0} records)`)
+      } else if (receiptsCount > 0) {
+        completedSyncs.push(`Receipts (${receiptsCount} records)`)
       }
       
       // Refresh the data first
@@ -141,22 +164,19 @@ export function DashboardContent() {
       await new Promise(resolve => setTimeout(resolve, 100))
       
       // Show appropriate toast message
-      if (failedSyncs.length === 2) {
+      if (billsFailed && receiptsFailed) {
         toast({ 
           title: 'Yardi sync failed', 
           description: 'Both bills and receipts sync failed',
           duration: 5000 
         })
       } else if (billsFailed || receiptsFailed) {
-        const parts: string[] = []
-        if (!billsFailed && billsCount > 0) parts.push(`Bills (${billsCount} records)`)
-        if (!receiptsFailed && receiptsCount > 0) parts.push(`Receipts (${receiptsCount} records)`)
         toast({ 
           title: 'Partial sync completed', 
           description: `${failedSyncs[0]} sync failed, but ${completedSyncs.join(' and ')} completed successfully`,
           duration: 5000 
         })
-      } else if (completedSyncs.length === 2) {
+      } else if (completedSyncs.length > 0) {
         console.log('Showing success toast')
         toast({ 
           title: 'Yardi sync completed successfully', 
@@ -222,45 +242,66 @@ export function DashboardContent() {
       
       const syncOperation = await DataService.syncQuickBooksToYardi('all', from, to, 'DEFAULT')
       
-      if (syncOperation.status === 'completed') {
+      console.log('QuickBooks sync result:', syncOperation)
+      
+      // Use helper functions to check results
+      const recordsProcessed = getCount(syncOperation)
+      const hasFailed = isFail(syncOperation)
+      
+      // Refresh the data first
+      await loadExpenses()
+      await loadRentPayments()
+      
+      // Hide sync overlay before showing toast
+      setSyncing(false)
+      setSyncMessage("")
+      setLoadingExpenses(false)
+      setLoadingRent(false)
+      
+      // Small delay to ensure overlay is fully removed before showing toast
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Show appropriate toast message
+      if (hasFailed) {
+        toast({ 
+          title: 'QuickBooks sync failed', 
+          description: syncOperation.message || 'An error occurred during sync',
+          duration: 5000 
+        })
+      } else if (recordsProcessed > 0) {
+        console.log('Showing QuickBooks success toast')
         toast({ 
           title: 'QuickBooks sync completed successfully', 
-          description: `Processed ${syncOperation.recordsProcessed || 0} records`,
-          duration: 3000 
+          description: `Processed ${recordsProcessed} records`,
+          duration: 5000 
         })
         const successTime = new Date().toISOString()
         setLastQuickBooksSync(successTime)
         try { localStorage.setItem('lastQuickBooksSync', successTime) } catch (e) {}
-      } else if (syncOperation.status === 'failed') {
-        toast({ 
-          title: 'QuickBooks sync failed', 
-          description: syncOperation.message,
-          duration: 4000 
-        })
       } else {
+        console.log('QuickBooks sync status unclear:', syncOperation)
         toast({ 
-          title: 'QuickBooks sync in progress', 
-          description: syncOperation.message,
-          duration: 3000 
+          title: 'QuickBooks sync completed', 
+          description: syncOperation.message || `Status: ${syncOperation.status || 'unknown'}`,
+          duration: 5000 
         })
       }
 
-      // Refresh the data
-      await loadExpenses()
-      await loadRentPayments()
     } catch (error) {
       console.error('QuickBooks sync error:', error)
+      // Hide sync overlay
+      setSyncing(false)
+      setSyncMessage("")
+      setLoadingExpenses(false)
+      setLoadingRent(false)
+      
+      // Show error toast
+      await new Promise(resolve => setTimeout(resolve, 100))
       toast({ 
         title: 'QuickBooks sync error', 
         description: error instanceof Error ? error.message : 'Unknown error',
-        duration: 4000 
+        duration: 5000 
       })
-    } finally {
-      setLoadingExpenses(false)
-      setLoadingRent(false)
-      // hide global sync overlay
-      setSyncing(false)
-      setSyncMessage("")
     }
   }
 
@@ -363,7 +404,7 @@ export function DashboardContent() {
 
             <div className="flex flex-col items-center">
               <Button size="sm" variant="outline" onClick={handleSyncQuickBooks} disabled={syncing}>
-                Sync from Quickbooks<Image src="/quickbooks.svg" alt="QuickBooks"  className="object-contain" priority width={20} height={20}/>
+                Sync from QuickBooks<Image src="/quickbooks.svg" alt="QuickBooks"  className="object-contain" priority width={20} height={20}/>
               </Button>
               <div className="relative mt-1">
                 <div className="flex items-center gap-2">
