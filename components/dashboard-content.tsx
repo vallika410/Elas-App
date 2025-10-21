@@ -50,14 +50,9 @@ export function DashboardContent() {
 
   // load last sync timestamps from localStorage on mount
   useEffect(() => {
-    try {
-      const y = localStorage.getItem('lastYardiSync')
-      const q = localStorage.getItem('lastQuickBooksSync')
-      setLastYardiSync(y)
-      setLastQuickBooksSync(q)
-    } catch (e) {
-      // ignore localStorage errors in SSR/privileged contexts
-    }
+     // Only set state if not already set by a sync
+    setLastYardiSync(prev => prev ?? localStorage.getItem('lastYardiSync'));
+    setLastQuickBooksSync(prev => prev ?? localStorage.getItem('lastQuickBooksSync'));
   }, [])
 
   const getDateRange = () => {
@@ -183,10 +178,6 @@ export function DashboardContent() {
           description: `Synced ${completedSyncs.join(' and ')}. Total: ${totalRecords} records`,
           duration: 5000 
         })
-        // record the last successful sync time
-        const successTime = new Date().toISOString()
-        setLastYardiSync(successTime)
-        try { localStorage.setItem('lastYardiSync', successTime) } catch (e) {}
       } else {
         console.log('Sync status not completed or failed:', { billsSync, receiptsSync })
         toast({ 
@@ -194,6 +185,11 @@ export function DashboardContent() {
           description: `Bills: ${billsSync.status}, Receipts: ${receiptsSync.status}. Total: ${totalRecords} records`,
           duration: 5000 
         })
+        // record the last successful sync time
+        const successTime = new Date().toISOString()
+        console.log('Recording last Yardi sync time:', successTime)
+        setLastYardiSync(successTime)
+        try { localStorage.setItem('lastYardiSync', successTime) } catch (e) {}
       }
     } catch (error) {
       console.error('Yardi sync error:', error)
@@ -275,9 +271,6 @@ export function DashboardContent() {
           description: `Processed ${recordsProcessed} records`,
           duration: 5000 
         })
-        const successTime = new Date().toISOString()
-        setLastQuickBooksSync(successTime)
-        try { localStorage.setItem('lastQuickBooksSync', successTime) } catch (e) {}
       } else {
         console.log('QuickBooks sync status unclear:', syncOperation)
         toast({ 
@@ -285,6 +278,9 @@ export function DashboardContent() {
           description: syncOperation.message || `Status: ${syncOperation.status || 'unknown'}`,
           duration: 5000 
         })
+         const successTime = new Date().toISOString()
+        setLastQuickBooksSync(successTime)
+        try { localStorage.setItem('lastQuickBooksSync', successTime) } catch (e) {}
       }
 
     } catch (error) {
