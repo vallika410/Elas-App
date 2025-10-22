@@ -50,14 +50,9 @@ export function DashboardContent() {
 
   // load last sync timestamps from localStorage on mount
   useEffect(() => {
-    try {
-      const y = localStorage.getItem('lastYardiSync')
-      const q = localStorage.getItem('lastQuickBooksSync')
-      setLastYardiSync(y)
-      setLastQuickBooksSync(q)
-    } catch (e) {
-      // ignore localStorage errors in SSR/privileged contexts
-    }
+     // Only set state if not already set by a sync
+    setLastYardiSync(prev => prev ?? localStorage.getItem('lastYardiSync'));
+    setLastQuickBooksSync(prev => prev ?? localStorage.getItem('lastQuickBooksSync'));
   }, [])
 
   const getDateRange = () => {
