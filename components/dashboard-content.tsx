@@ -48,11 +48,31 @@ export function DashboardContent() {
     loadRentPayments()
   }, [rentSearch, fromDate, toDate])
 
-  // load last sync timestamps from localStorage on mount
+  // load last sync timestamps from backend on mount
   useEffect(() => {
-     // Only set state if not already set by a sync
-    setLastYardiSync(prev => prev ?? localStorage.getItem('lastYardiSync'));
-    setLastQuickBooksSync(prev => prev ?? localStorage.getItem('lastQuickBooksSync'));
+    const fetchTimestampsFromBackend = async () => {
+      try {
+        // Get user ID from localStorage (email or user identifier)
+        // For now, we'll use a placeholder userId. Update login to store actual user info
+        const userEmail = localStorage.getItem('elas-user-email') || 'user@example.com'
+        
+        const response = await fetch(`/api/sync-timestamp?userId=${encodeURIComponent(userEmail)}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.data) {
+            setLastYardiSync(data.data.yardiSync)
+            setLastQuickBooksSync(data.data.quickBooksSync)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching sync timestamps from backend:', error)
+        // Fallback to localStorage if backend fetch fails
+        setLastYardiSync(prev => prev ?? localStorage.getItem('lastYardiSync'))
+        setLastQuickBooksSync(prev => prev ?? localStorage.getItem('lastQuickBooksSync'))
+      }
+    }
+    
+    fetchTimestampsFromBackend()
   }, [])
 
   const getDateRange = () => {
@@ -105,6 +125,31 @@ export function DashboardContent() {
     return s === 'failed' || s === 'error' || s === 'failed_synchronization'
   }
 
+  // Save sync timestamp to backend database
+  const saveTimestampToBackend = async (source: 'yardi' | 'quickbooks', timestamp: string) => {
+    try {
+      const userEmail = localStorage.getItem('elas-user-email') || 'user@example.com'
+      
+      const response = await fetch('/api/sync-timestamp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: userEmail,
+          source,
+          timestamp,
+        }),
+      })
+
+      if (!response.ok) {
+        console.error('Failed to save timestamp to backend:', response.statusText)
+      }
+    } catch (error) {
+      console.error('Error saving timestamp to backend:', error)
+    }
+  }
+
   const handleSyncYardi = async () => {
     try {
       // show global sync overlay
@@ -118,9 +163,6 @@ export function DashboardContent() {
         DataService.syncYardiToQuickBooks('bills', 'chabot'),
         DataService.syncYardiToQuickBooks('receipts', 'chabot')
       ])
-      
-      console.log('Bills sync result:', billsSync)
-      console.log('Receipts sync result:', receiptsSync)
       
       // Use helper functions to check results
       const billsCount = getCount(billsSync)
@@ -172,27 +214,31 @@ export function DashboardContent() {
           duration: 5000 
         })
       } else if (completedSyncs.length > 0) {
-        console.log('Showing success toast')
         toast({ 
           title: 'Yardi sync completed successfully', 
           description: `Synced ${completedSyncs.join(' and ')}. Total: ${totalRecords} records`,
           duration: 5000 
         })
         // record the last successful sync time
-        
+        const successTime = new Date().toISOString()
+        setLastYardiSync(successTime)
+        // Save to backend database
+        await saveTimestampToBackend('yardi', successTime)
+        try { localStorage.setItem('lastYardiSync', successTime) } catch (e) {}
       } else {
-        console.log('Sync status not completed or failed:', { billsSync, receiptsSync })
         toast({ 
           title: 'Yardi sync completed', 
           description: `Bills: ${billsSync.status}, Receipts: ${receiptsSync.status}. Total: ${totalRecords} records`,
           duration: 5000 
         })
+        // record the last successful sync time
         const successTime = new Date().toISOString()
         setLastYardiSync(successTime)
+        // Save to backend database
+        await saveTimestampToBackend('yardi', successTime)
         try { localStorage.setItem('lastYardiSync', successTime) } catch (e) {}
       }
     } catch (error) {
-      console.error('Yardi sync error:', error)
       // Hide sync overlay
       setSyncing(false)
       setSyncMessage("")
@@ -238,8 +284,6 @@ export function DashboardContent() {
       
       const syncOperation = await DataService.syncQuickBooksToYardi('all', from, to, 'DEFAULT')
       
-      console.log('QuickBooks sync result:', syncOperation)
-      
       // Use helper functions to check results
       const recordsProcessed = getCount(syncOperation)
       const hasFailed = isFail(syncOperation)
@@ -265,15 +309,18 @@ export function DashboardContent() {
           duration: 5000 
         })
       } else if (recordsProcessed > 0) {
-        console.log('Showing QuickBooks success toast')
         toast({ 
           title: 'QuickBooks sync completed successfully', 
           description: `Processed ${recordsProcessed} records`,
           duration: 5000 
         })
-        
+        // record the last successful sync time
+        const successTime = new Date().toISOString()
+        setLastQuickBooksSync(successTime)
+        // Save to backend database
+        await saveTimestampToBackend('quickbooks', successTime)
+        try { localStorage.setItem('lastQuickBooksSync', successTime) } catch (e) {}
       } else {
-        console.log('QuickBooks sync status unclear:', syncOperation)
         toast({ 
           title: 'QuickBooks sync completed', 
           description: syncOperation.message || `Status: ${syncOperation.status || 'unknown'}`,
@@ -281,11 +328,12 @@ export function DashboardContent() {
         })
         const successTime = new Date().toISOString()
         setLastQuickBooksSync(successTime)
+        // Save to backend database
+        await saveTimestampToBackend('quickbooks', successTime)
         try { localStorage.setItem('lastQuickBooksSync', successTime) } catch (e) {}
       }
 
     } catch (error) {
-      console.error('QuickBooks sync error:', error)
       // Hide sync overlay
       setSyncing(false)
       setSyncMessage("")
