@@ -226,6 +226,64 @@ export class QbToYardiApi {
   }
 }
 
+// QuickBooks Data API
+export interface ExpenseInvoice {
+  id: string
+  vendorName: string
+  docNumber: string
+  dueDate: string
+  amount: number
+  status: 'open' | 'paid' | 'overdue'
+}
+
+export interface RentPayment {
+  id: string
+  tenantName: string
+  paymentDate: string
+  amount: number
+  reference: string
+  appliedInvoice?: string
+}
+
+export interface DataFetchResponse<T> {
+  success: boolean
+  data: T[]
+  count: number
+  timestamp: string
+}
+
+export class QuickBooksDataApi {
+  static async fetchExpenseInvoices(params: {
+    from_date?: string
+    to_date?: string
+    search?: string
+  }): Promise<DataFetchResponse<ExpenseInvoice>> {
+    const queryParams = new URLSearchParams()
+    if (params.from_date) queryParams.append('from_date', params.from_date)
+    if (params.to_date) queryParams.append('to_date', params.to_date)
+    if (params.search) queryParams.append('search', params.search)
+    
+    return apiClient.get<DataFetchResponse<ExpenseInvoice>>(
+      `/data/expense-invoices?${queryParams}`
+    )
+  }
+
+  static async fetchRentPayments(params: {
+    from_date?: string
+    to_date?: string
+    search?: string
+  }): Promise<DataFetchResponse<RentPayment>> {
+    const queryParams = new URLSearchParams()
+    if (params.from_date) queryParams.append('from_date', params.from_date)
+    if (params.to_date) queryParams.append('to_date', params.to_date)
+    if (params.search) queryParams.append('search', params.search)
+    
+    return apiClient.get<DataFetchResponse<RentPayment>>(
+      `/data/rent-payments?${queryParams}`
+    )
+  }
+}
+
 // General API utilities
 export class ApiUtils {
   static async healthCheck(): Promise<{ status: string; timestamp: string; services: any }> {
