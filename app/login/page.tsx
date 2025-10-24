@@ -19,6 +19,7 @@ export default function LoginPage() {
     // Any non-empty inputs succeed
     if (email && password) {
       localStorage.setItem("elas-auth", "true")
+      localStorage.setItem("elas-user-email", email)
       router.push("/dashboard")
     }
   }
