@@ -141,3 +141,234 @@
 .bg-neutral-900::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* Smooth animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInFromLeft 0.5s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInFromRight 0.5s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.4s ease-out forwards;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+/* Smooth transitions for all interactive elements */
+button, a, input, select, textarea {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Enhanced hover effects */
+.hover-lift {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Table row animation */
+@keyframes tableRowFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.table-row-animate {
+  animation: tableRowFadeIn 0.3s ease-out forwards;
+}
+
+/* Loading skeleton animation */
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-loading {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+/* Calendar enhancements */
+[data-slot="popover-content"] {
+  animation: fadeIn 0.2s ease-out;
+  background: white !important;
+  z-index: 9999 !important;
+  position: fixed !important;
+}
+
+[data-slot="popover"] {
+  z-index: 9999 !important;
+}
+
+[data-slot="calendar"] {
+  background: white;
+  display: block !important;
+}
+
+[data-slot="calendar"] button {
+  transition: all 0.2s ease-in-out;
+}
+
+[data-slot="calendar"] button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+[data-slot="calendar"] [data-selected-single="true"] {
+  background-color: rgb(30, 41, 59) !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+[data-slot="calendar"] [data-selected-single="true"]:hover {
+  background-color: rgb(51, 65, 85) !important;
+}
+
+/* React Day Picker uses flex layout, not tables - so we need to style accordingly */
+[data-slot="calendar"] .rdp-month {
+  display: flex !important;
+  flex-direction: column;
+}
+
+[data-slot="calendar"] .rdp-weekdays,
+[data-slot="calendar"] .rdp-week {
+  display: flex !important;
+  width: 100%;
+}
+
+[data-slot="calendar"] .rdp-weekday,
+[data-slot="calendar"] .rdp-day {
+  flex: 1;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Calendar month caption */
+[data-slot="calendar"] .rdp-month_caption {
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Weekday headers */
+[data-slot="calendar"] .rdp-weekday {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+/* Navigation buttons */
+[data-slot="calendar"] nav {
+  display: flex !important;
+}
+
+[data-slot="calendar"] nav button {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Day buttons */
+[data-slot="calendar"] .rdp-day button {
+  width: 100%;
+  height: 100%;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+}

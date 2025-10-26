@@ -165,13 +165,13 @@ export function SettingsContent() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
+      <h1 className="text-3xl font-bold text-neutral-900 tracking-tight animate-fade-in">Settings</h1>
 
-      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-6 space-y-8">
+      <div className="bg-white rounded-xl border border-neutral-200 shadow-md p-8 space-y-8 hover-lift animate-fade-in" style={{ animationDelay: "0.1s" }}>
          {/* QuickBooks Integration */}
-        <div className="space-y-4">
+        <div className="space-y-4 p-6 bg-gradient-to-r from-neutral-50 to-white rounded-xl border border-neutral-100">
           <div>
-            <h3 className="text-base font-medium text-neutral-900">
+            <h3 className="text-lg font-semibold text-neutral-900">
               QuickBooks Integration
             </h3>
             <p className="text-sm text-neutral-500 mt-1">
@@ -182,12 +182,15 @@ export function SettingsContent() {
           <div className="flex items-center gap-4">
             <div className="flex-1">
               {qbConnected ? (
-                <div className="text-sm text-neutral-700">
-                  Connected:{" "}
-                  <span className="font-medium">{qbAccountName}</span>
+                <div className="text-sm text-neutral-700 flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span>Connected: <span className="font-semibold">{qbAccountName}</span></span>
                 </div>
               ) : (
-                <div className="text-sm text-neutral-500">Not connected</div>
+                <div className="text-sm text-neutral-500 flex items-center gap-2">
+                  <div className="w-2 h-2 bg-neutral-300 rounded-full"></div>
+                  <span>Not connected</span>
+                </div>
               )}
             </div>
 
@@ -195,11 +198,15 @@ export function SettingsContent() {
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={handleDisconnectQuickBooks}>
+                onClick={handleDisconnectQuickBooks}
+                className="transition-all duration-200 hover:scale-105 hover:shadow-lg">
                 Disconnect
               </Button>
             ) : (
-              <Button size="sm" onClick={handleConnectQuickBooks}>
+              <Button 
+                size="sm" 
+                onClick={handleConnectQuickBooks}
+                className="transition-all duration-200 hover:scale-105 hover:shadow-lg bg-slate-900 hover:bg-slate-800 text-white">
                 Connect QuickBooks
               </Button>
             )}
@@ -208,22 +215,22 @@ export function SettingsContent() {
         <div className="border-t border-neutral-200" />
 
         {/* Default Date Range */}
-        <div className="space-y-4">
+        <div className="space-y-4 p-6 bg-gradient-to-r from-neutral-50 to-white rounded-xl border border-neutral-100">
           <div>
-            <h3 className="text-base font-medium text-neutral-900">Default Date Range</h3>
+            <h3 className="text-lg font-semibold text-neutral-900">Default Date Range</h3>
             <p className="text-sm text-neutral-500 mt-1">Choose the default date range for Dashboard views</p>
           </div>
 
           <RadioGroup value={dateRange} onValueChange={handleDateRangeChange}>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white transition-all duration-200 cursor-pointer">
               <RadioGroupItem value="this-month" id="this-month" />
-              <Label htmlFor="this-month" className="font-normal cursor-pointer">
+              <Label htmlFor="this-month" className="font-normal cursor-pointer text-sm">
                 This month
               </Label>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white transition-all duration-200 cursor-pointer">
               <RadioGroupItem value="last-month" id="last-month" />
-              <Label htmlFor="last-month" className="font-normal cursor-pointer">
+              <Label htmlFor="last-month" className="font-normal cursor-pointer text-sm">
                 Last month
               </Label>
             </div>
@@ -233,9 +240,9 @@ export function SettingsContent() {
         <div className="border-t border-neutral-200" />
 
         {/* Clearing Account */}
-        <div className="space-y-4">
+        <div className="space-y-4 p-6 bg-gradient-to-r from-neutral-50 to-white rounded-xl border border-neutral-100">
           <div>
-            <h3 className="text-base font-medium text-neutral-900">Clearing Account</h3>
+            <h3 className="text-lg font-semibold text-neutral-900">Clearing Account</h3>
             <p className="text-sm text-neutral-500 mt-1">
               Account name used for Journal Entries when receipts don't match invoices
             </p>
@@ -247,6 +254,7 @@ export function SettingsContent() {
               onChange={(e) => setClearingAccount(e.target.value)}
               onBlur={handleClearingAccountBlur}
               placeholder="Enter clearing account name"
+              className="transition-all duration-200 focus:shadow-md"
             />
           </div>
         </div>

@@ -5,6 +5,7 @@ import { DataService, type ExpenseInvoice, type RentPayment } from "@/lib/data-s
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Search, Info } from "lucide-react"
 import { format, formatDistanceToNow } from 'date-fns'
 import { useToast } from "@/hooks/use-toast"
@@ -12,9 +13,44 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 import Image from "next/image"
 
 export function DashboardContent() {
-  // Separate date ranges for Expenses and Rent sections
-  const [fromDate, setFromDate] = useState<string>("")
-  const [toDate, setToDate] = useState<string>("")
+  // Initialize dates based on user's default preference using lazy initialization
+  const [fromDate, setFromDate] = useState<Date | undefined>(() => {
+    // Check if we're in the browser
+    if (typeof window === 'undefined') {
+      const now = new Date()
+      return new Date(now.getFullYear(), now.getMonth(), 1)
+    }
+
+    const now = new Date()
+    const dateRangeSetting = localStorage.getItem('elas-date-range') || 'this-month'
+    
+    if (dateRangeSetting === 'last-month') {
+      // Last month: first day
+      return new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    } else {
+      // This month (default): first day
+      return new Date(now.getFullYear(), now.getMonth(), 1)
+    }
+  })
+
+  const [toDate, setToDate] = useState<Date | undefined>(() => {
+    // Check if we're in the browser
+    if (typeof window === 'undefined') {
+      const now = new Date()
+      return new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    }
+
+    const now = new Date()
+    const dateRangeSetting = localStorage.getItem('elas-date-range') || 'this-month'
+    
+    if (dateRangeSetting === 'last-month') {
+      // Last month: last day
+      return new Date(now.getFullYear(), now.getMonth(), 0)
+    } else {
+      // This month (default): last day
+      return new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    }
+  })
 
   const [expenseSearch, setExpenseSearch] = useState("")
   const [rentSearch, setRentSearch] = useState("")
@@ -48,45 +84,40 @@ export function DashboardContent() {
     loadRentPayments()
   }, [rentSearch, fromDate, toDate])
 
-  // load last sync timestamps from backend on mount
+  // load last sync timestamps from localStorage on mount
   useEffect(() => {
-    const fetchTimestampsFromBackend = async () => {
+    const loadTimestampsFromStorage = () => {
       try {
-        // Get user ID from localStorage (email or user identifier)
-        // For now, we'll use a placeholder userId. Update login to store actual user info
-        const userEmail = localStorage.getItem('elas-user-email') || 'user@example.com'
+        const yardiSync = localStorage.getItem('lastYardiSync')
+        const quickBooksSync = localStorage.getItem('lastQuickBooksSync')
         
-        const response = await fetch(`/api/sync-timestamp?userId=${encodeURIComponent(userEmail)}`)
-        if (response.ok) {
-          const data = await response.json()
-          if (data.data) {
-            setLastYardiSync(data.data.yardiSync)
-            setLastQuickBooksSync(data.data.quickBooksSync)
-          }
-        }
+        setLastYardiSync(yardiSync)
+        setLastQuickBooksSync(quickBooksSync)
       } catch (error) {
-        console.error('Error fetching sync timestamps from backend:', error)
-        // Fallback to localStorage if backend fetch fails
-        setLastYardiSync(prev => prev ?? localStorage.getItem('lastYardiSync'))
-        setLastQuickBooksSync(prev => prev ?? localStorage.getItem('lastQuickBooksSync'))
+        console.error('Error loading sync timestamps from localStorage:', error)
       }
     }
     
-    fetchTimestampsFromBackend()
+    loadTimestampsFromStorage()
   }, [])
 
   const getDateRange = () => {
     const now = new Date()
-    let from = fromDate
-    let to = toDate
+    let from: string
+    let to: string
 
-    if (!from) {
+    if (!fromDate) {
       const f = new Date(now.getFullYear(), now.getMonth(), 1)
       from = f.toISOString().split("T")[0]
+    } else {
+      from = fromDate.toISOString().split("T")[0]
     }
-    if (!to) {
+    
+    if (!toDate) {
       const t = new Date(now.getFullYear(), now.getMonth() + 1, 0)
       to = t.toISOString().split("T")[0]
+    } else {
+      to = toDate.toISOString().split("T")[0]
     }
 
     return { from, to }
@@ -125,28 +156,13 @@ export function DashboardContent() {
     return s === 'failed' || s === 'error' || s === 'failed_synchronization'
   }
 
-  // Save sync timestamp to backend database
-  const saveTimestampToBackend = async (source: 'yardi' | 'quickbooks', timestamp: string) => {
+  // Save sync timestamp to localStorage
+  const saveTimestampToStorage = (source: 'yardi' | 'quickbooks', timestamp: string) => {
     try {
-      const userEmail = localStorage.getItem('elas-user-email') || 'user@example.com'
-      
-      const response = await fetch('/api/sync-timestamp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: userEmail,
-          source,
-          timestamp,
-        }),
-      })
-
-      if (!response.ok) {
-        console.error('Failed to save timestamp to backend:', response.statusText)
-      }
+      const key = source === 'yardi' ? 'lastYardiSync' : 'lastQuickBooksSync'
+      localStorage.setItem(key, timestamp)
     } catch (error) {
-      console.error('Error saving timestamp to backend:', error)
+      console.error('Error saving timestamp to localStorage:', error)
     }
   }
 
@@ -222,9 +238,7 @@ export function DashboardContent() {
         // record the last successful sync time
         const successTime = new Date().toISOString()
         setLastYardiSync(successTime)
-        // Save to backend database
-        await saveTimestampToBackend('yardi', successTime)
-        try { localStorage.setItem('lastYardiSync', successTime) } catch (e) {}
+        saveTimestampToStorage('yardi', successTime)
       } else {
         toast({ 
           title: 'Yardi sync completed', 
@@ -234,9 +248,7 @@ export function DashboardContent() {
         // record the last successful sync time
         const successTime = new Date().toISOString()
         setLastYardiSync(successTime)
-        // Save to backend database
-        await saveTimestampToBackend('yardi', successTime)
-        try { localStorage.setItem('lastYardiSync', successTime) } catch (e) {}
+        saveTimestampToStorage('yardi', successTime)
       }
     } catch (error) {
       // Hide sync overlay
@@ -317,9 +329,7 @@ export function DashboardContent() {
         // record the last successful sync time
         const successTime = new Date().toISOString()
         setLastQuickBooksSync(successTime)
-        // Save to backend database
-        await saveTimestampToBackend('quickbooks', successTime)
-        try { localStorage.setItem('lastQuickBooksSync', successTime) } catch (e) {}
+        saveTimestampToStorage('quickbooks', successTime)
       } else {
         toast({ 
           title: 'QuickBooks sync completed', 
@@ -328,9 +338,7 @@ export function DashboardContent() {
         })
         const successTime = new Date().toISOString()
         setLastQuickBooksSync(successTime)
-        // Save to backend database
-        await saveTimestampToBackend('quickbooks', successTime)
-        try { localStorage.setItem('lastQuickBooksSync', successTime) } catch (e) {}
+        saveTimestampToStorage('quickbooks', successTime)
       }
 
     } catch (error) {
@@ -415,16 +423,22 @@ export function DashboardContent() {
     <TooltipProvider>
     <div className="relative">
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in">
           <div>
-            <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
+            <h1 className="text-3xl font-bold text-neutral-900 tracking-tight">Dashboard</h1>
             <p className="text-sm text-neutral-500 mt-1">QuickBooks data synced from approved transactions</p>
           </div>
 
-          <div className="mt-2 sm:mt-0 flex items-center gap-6">
-            <div className="flex flex-col items-center">
-              <Button size="sm" variant="outline" onClick={handleSyncYardi} disabled={syncing}>
-                Sync from Yardi<Image src="/Yardi.svg" alt="Yardi"  className="object-contain" priority width={20} height={20}/>
+          <div className="mt-2 sm:mt-0 flex items-center gap-4">
+            <div className="flex flex-col items-center animate-slide-in-right" style={{ animationDelay: "0.1s" }}>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={handleSyncYardi} 
+                disabled={syncing}
+                className="transition-all duration-200 hover:shadow-md hover:scale-105 hover:border-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Sync from Yardi<Image src="/Yardi.svg" alt="Yardi" className="object-contain ml-2" priority width={20} height={20}/>
               </Button>
               <div className="relative mt-1">
                 <div className="flex items-center gap-2">
@@ -433,7 +447,7 @@ export function DashboardContent() {
                     <TooltipTrigger asChild>
                       <button
                         aria-label="Show exact Yardi sync time"
-                        className="p-1 rounded-sm text-neutral-400 hover:text-neutral-600"
+                        className="p-1 rounded-sm text-neutral-400 hover:text-neutral-600 transition-colors duration-200"
                         type="button"
                       >
                         <Info className="w-3 h-3" />
@@ -447,9 +461,15 @@ export function DashboardContent() {
               </div>
             </div>
 
-            <div className="flex flex-col items-center">
-              <Button size="sm" variant="outline" onClick={handleSyncQuickBooks} disabled={syncing}>
-                Sync from QuickBooks<Image src="/quickbooks.svg" alt="QuickBooks"  className="object-contain" priority width={20} height={20}/>
+            <div className="flex flex-col items-center animate-slide-in-right" style={{ animationDelay: "0.2s" }}>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={handleSyncQuickBooks} 
+                disabled={syncing}
+                className="transition-all duration-200 hover:shadow-md hover:scale-105 hover:border-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Sync from QuickBooks<Image src="/quickbooks.svg" alt="QuickBooks" className="object-contain ml-2" priority width={20} height={20}/>
               </Button>
               <div className="relative mt-1">
                 <div className="flex items-center gap-2">
@@ -458,7 +478,7 @@ export function DashboardContent() {
                     <TooltipTrigger asChild>
                       <button
                         aria-label="Show exact QuickBooks sync time"
-                        className="p-1 rounded-sm text-neutral-400 hover:text-neutral-600"
+                        className="p-1 rounded-sm text-neutral-400 hover:text-neutral-600 transition-colors duration-200"
                         type="button"
                       >
                         <Info className="w-3 h-3" />
@@ -475,44 +495,40 @@ export function DashboardContent() {
         </div>
 
         {/* Expenses Section */}
-        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm">
-          <div className="p-6 border-b border-neutral-200">
+        <div className="bg-white rounded-xl border border-neutral-200 shadow-md hover-lift animate-fade-in" style={{ animationDelay: "0.3s" }}>
+          <div className="p-6 border-b border-neutral-200 bg-gradient-to-r from-neutral-50 to-white rounded-t-xl">
             <div className="flex items-center justify-between gap-4 flex-wrap">
-              <h2 className="text-lg font-medium text-neutral-900">Expenses (Vendor Bills)</h2>
+              <h2 className="text-xl font-semibold text-neutral-900">Expenses (Vendor Bills)</h2>
               <div className="flex items-center gap-3">
                 {/* Date pickers to choose the range for the table */}
-                <div className="flex gap-2">
-                  <label className="flex flex-col text-sm">
-                    <span className="text-neutral-500 text-xs">From</span>
-                    <Input
-                      type="date"
-                      value={fromDate}
-                      onChange={(e) => setFromDate(e.target.value)}
-                      className="w-auto rounded-md border border-neutral-200 px-2 py-1 bg-white text-sm"
-                      aria-label="Expenses from date (YYYY-MM-DD)"
-                      style={{ textTransform: "none" }}
+                <div className="flex gap-3 items-center">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-neutral-500 text-xs font-medium">From</span>
+                    <DatePicker
+                      date={fromDate}
+                      onDateChange={setFromDate}
+                      placeholder="Select start date"
+                      className="w-[160px]"
                     />
-                  </label>
-                  <div className="text-neutral-400 self-center">—</div>
-                  <label className="flex flex-col text-sm">
-                    <span className="text-neutral-500 text-xs">To</span>
-                    <Input
-                      type="date"
-                      value={toDate}
-                      onChange={(e) => setToDate(e.target.value)}
-                      className="w-auto rounded-md border border-neutral-200 px-2 py-1 bg-white text-sm"
-                      aria-label="Expenses to date (YYYY-MM-DD)"
-                      style={{ textTransform: "none" }}
+                  </div>
+                  <div className="text-neutral-400 self-end mb-2">→</div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-neutral-500 text-xs font-medium">To</span>
+                    <DatePicker
+                      date={toDate}
+                      onDateChange={setToDate}
+                      placeholder="Select end date"
+                      className="w-[160px]"
                     />
-                  </label>
+                  </div>
                 </div>
                 <div className="relative w-64 top-2">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 transition-colors duration-200" />
                   <Input
                     placeholder="Search..."
                     value={expenseSearch}
                     onChange={(e) => setExpenseSearch(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 transition-all duration-200 focus:shadow-md"
                   />
                 </div>
               </div>
@@ -543,30 +559,40 @@ export function DashboardContent() {
               <tbody className="bg-white divide-y divide-neutral-200">
                 {loadingExpenses ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
-                      Loading...
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-8 h-8 border-4 border-neutral-200 border-t-slate-800 rounded-full animate-spin"></div>
+                        <span className="text-sm text-neutral-500">Loading expenses...</span>
+                      </div>
                     </td>
                   </tr>
                 ) : expenses.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
-                      No expenses found
+                    <td colSpan={5} className="px-6 py-12 text-center text-neutral-500">
+                      <div className="flex flex-col items-center gap-2">
+                        <Search className="w-8 h-8 text-neutral-300" />
+                        <span>No expenses found</span>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   // show only the current page of expenses
                   expenses
                     .slice(expensePage * PAGE_SIZE, expensePage * PAGE_SIZE + PAGE_SIZE)
-                    .map((expense) => (
-                    <tr key={expense.id} className="hover:bg-neutral-50">
-                      <td className="px-6 py-4 text-sm text-neutral-900">{expense.vendorName}</td>
+                    .map((expense, index) => (
+                    <tr 
+                      key={expense.id} 
+                      className="hover:bg-neutral-50 transition-all duration-200 cursor-pointer animate-fade-in"
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
+                      <td className="px-6 py-4 text-sm font-medium text-neutral-900">{expense.vendorName}</td>
                       <td className="px-6 py-4 text-sm text-neutral-600">{expense.docNumber}</td>
                       <td className="px-6 py-4 text-sm text-neutral-600">{formatDate(expense.dueDate)}</td>
-                      <td className="px-6 py-4 text-sm text-neutral-900 text-right font-medium">
+                      <td className="px-6 py-4 text-sm text-neutral-900 text-right font-semibold">
                         {formatCurrency(expense.amount)}
                       </td>
                       <td className="px-6 py-4">
-                        <Badge variant="secondary" className={getStatusColor(expense.status)}>
+                        <Badge variant="secondary" className={`${getStatusColor(expense.status)} transition-all duration-200 hover:shadow-md`}>
                           {expense.status}
                         </Badge>
                       </td>
@@ -577,12 +603,18 @@ export function DashboardContent() {
             </table>
           </div>
           {/* Pagination controls for expenses */}
-          <div className="p-4 border-t border-neutral-100 flex items-center justify-between">
-            <div className="text-sm text-neutral-500">
+          <div className="p-4 border-t border-neutral-100 flex items-center justify-between bg-neutral-50/50">
+            <div className="text-sm text-neutral-600 font-medium">
               Showing {expenses.length === 0 ? 0 : expensePage * PAGE_SIZE + 1} - {Math.min(expenses.length, (expensePage + 1) * PAGE_SIZE)} of {expenses.length}
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setExpensePage((p) => Math.max(0, p - 1))} disabled={expensePage === 0}>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setExpensePage((p) => Math.max(0, p - 1))} 
+                disabled={expensePage === 0}
+                className="transition-all duration-200 hover:scale-105 disabled:opacity-50"
+              >
                 Prev
               </Button>
               {Array.from({ length: expenseWindow.end - expenseWindow.start + 1 }, (_, i) => expenseWindow.start + i).map((p) => (
@@ -593,11 +625,18 @@ export function DashboardContent() {
                   onClick={() => setExpensePage(p)}
                   aria-current={p === expensePage ? 'page' : undefined}
                   aria-label={`Go to page ${p + 1}`}
+                  className={`transition-all duration-200 hover:scale-105 ${p === expensePage ? 'shadow-md' : ''}`}
                 >
                   {p + 1}
                 </Button>
               ))}
-              <Button size="sm" variant="outline" onClick={() => setExpensePage((p) => Math.min(expenseTotalPages - 1, p + 1))} disabled={expensePage >= expenseTotalPages - 1}>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setExpensePage((p) => Math.min(expenseTotalPages - 1, p + 1))} 
+                disabled={expensePage >= expenseTotalPages - 1}
+                className="transition-all duration-200 hover:scale-105 disabled:opacity-50"
+              >
                 Next
               </Button>
             </div>
@@ -605,44 +644,40 @@ export function DashboardContent() {
         </div>
 
         {/* Rent Payments Section */}
-        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm">
-          <div className="p-6 border-b border-neutral-200">
+        <div className="bg-white rounded-xl border border-neutral-200 shadow-md hover-lift animate-fade-in" style={{ animationDelay: "0.4s" }}>
+          <div className="p-6 border-b border-neutral-200 bg-gradient-to-r from-neutral-50 to-white rounded-t-xl">
             <div className="flex items-center justify-between gap-4 flex-wrap">
-              <h2 className="text-lg font-medium text-neutral-900">Rent Payments</h2>
+              <h2 className="text-xl font-semibold text-neutral-900">Rent Payments</h2>
               <div className="flex items-center gap-3">
                 {/* Same date pickers used for rent payments */}
-                <div className="flex items-end gap-3">
-                  <label className="flex flex-col text-sm">
-                    <span className="text-neutral-500 text-xs">From</span>
-                    <Input
-                      type="date"
-                      value={fromDate}
-                      onChange={(e) => setFromDate(e.target.value)}
-                      className="w-auto rounded-md border border-neutral-200 px-2 py-1 bg-white text-sm"
-                      aria-label="Rent from date (YYYY-MM-DD)"
-                      style={{ textTransform: "none" }}
+                <div className="flex gap-3 items-center">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-neutral-500 text-xs font-medium">From</span>
+                    <DatePicker
+                      date={fromDate}
+                      onDateChange={setFromDate}
+                      placeholder="Select start date"
+                      className="w-[160px]"
                     />
-                  </label>
-                  <div className="text-neutral-400 self-center">—</div>
-                  <label className="flex flex-col text-sm">
-                    <span className="text-neutral-500 text-xs">To</span>
-                    <Input
-                      type="date"
-                      value={toDate}
-                      onChange={(e) => setToDate(e.target.value)}
-                      className="w-auto rounded-md border border-neutral-200 px-2 py-1 bg-white text-sm"
-                      aria-label="Rent to date (YYYY-MM-DD)"
-                      style={{ textTransform: "none" }}
+                  </div>
+                  <div className="text-neutral-400 self-end mb-2">→</div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-neutral-500 text-xs font-medium">To</span>
+                    <DatePicker
+                      date={toDate}
+                      onDateChange={setToDate}
+                      placeholder="Select end date"
+                      className="w-[160px]"
                     />
-                  </label>
+                  </div>
                 </div>
                 <div className="relative w-64 top-2">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 transition-colors duration-200" />
                   <Input
                     placeholder="Search..."
                     value={rentSearch}
                     onChange={(e) => setRentSearch(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 transition-all duration-200 focus:shadow-md"
                   />
                 </div>
               </div>
@@ -673,31 +708,41 @@ export function DashboardContent() {
               <tbody className="bg-white divide-y divide-neutral-200">
                 {loadingRent ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
-                      Loading...
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-8 h-8 border-4 border-neutral-200 border-t-slate-800 rounded-full animate-spin"></div>
+                        <span className="text-sm text-neutral-500">Loading rent payments...</span>
+                      </div>
                     </td>
                   </tr>
                 ) : rentPayments.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-neutral-500">
-                      No rent payments found
+                    <td colSpan={5} className="px-6 py-12 text-center text-neutral-500">
+                      <div className="flex flex-col items-center gap-2">
+                        <Search className="w-8 h-8 text-neutral-300" />
+                        <span>No rent payments found</span>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   // show only the current page of rent payments
                   rentPayments
                     .slice(rentPage * PAGE_SIZE, rentPage * PAGE_SIZE + PAGE_SIZE)
-                    .map((payment) => (
-                    <tr key={payment.id} className="hover:bg-neutral-50">
-                      <td className="px-6 py-4 text-sm text-neutral-900">{payment.tenantName}</td>
+                    .map((payment, index) => (
+                    <tr 
+                      key={payment.id} 
+                      className="hover:bg-neutral-50 transition-all duration-200 cursor-pointer animate-fade-in"
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
+                      <td className="px-6 py-4 text-sm font-medium text-neutral-900">{payment.tenantName}</td>
                       <td className="px-6 py-4 text-sm text-neutral-600">{formatDate(payment.paymentDate)}</td>
-                      <td className="px-6 py-4 text-sm text-neutral-900 text-right font-medium">
+                      <td className="px-6 py-4 text-sm text-neutral-900 text-right font-semibold">
                         {formatCurrency(payment.amount)}
                       </td>
                       <td className="px-6 py-4 text-sm text-neutral-600">{payment.reference}</td>
                       <td className="px-6 py-4">
                         {payment.appliedInvoice ? (
-                          <Badge variant="secondary" className="bg-green-100 text-green-800">
+                          <Badge variant="secondary" className="bg-green-100 text-green-800 transition-all duration-200 hover:shadow-md">
                             {payment.appliedInvoice}
                           </Badge>
                         ) : (
@@ -711,12 +756,18 @@ export function DashboardContent() {
             </table>
           </div>
           {/* Pagination controls for rent payments */}
-          <div className="p-4 border-t border-neutral-100 flex items-center justify-between">
-            <div className="text-sm text-neutral-500">
+          <div className="p-4 border-t border-neutral-100 flex items-center justify-between bg-neutral-50/50">
+            <div className="text-sm text-neutral-600 font-medium">
               Showing {rentPayments.length === 0 ? 0 : rentPage * PAGE_SIZE + 1} - {Math.min(rentPayments.length, (rentPage + 1) * PAGE_SIZE)} of {rentPayments.length}
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setRentPage((p) => Math.max(0, p - 1))} disabled={rentPage === 0}>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setRentPage((p) => Math.max(0, p - 1))} 
+                disabled={rentPage === 0}
+                className="transition-all duration-200 hover:scale-105 disabled:opacity-50"
+              >
                 Prev
               </Button>
               {Array.from({ length: rentWindow.end - rentWindow.start + 1 }, (_, i) => rentWindow.start + i).map((p) => (
@@ -727,11 +778,18 @@ export function DashboardContent() {
                   onClick={() => setRentPage(p)}
                   aria-current={p === rentPage ? 'page' : undefined}
                   aria-label={`Go to page ${p + 1}`}
+                  className={`transition-all duration-200 hover:scale-105 ${p === rentPage ? 'shadow-md' : ''}`}
                 >
                   {p + 1}
                 </Button>
               ))}
-              <Button size="sm" variant="outline" onClick={() => setRentPage((p) => Math.min(rentTotalPages - 1, p + 1))} disabled={rentPage >= rentTotalPages - 1}>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setRentPage((p) => Math.min(rentTotalPages - 1, p + 1))} 
+                disabled={rentPage >= rentTotalPages - 1}
+                className="transition-all duration-200 hover:scale-105 disabled:opacity-50"
+              >
                 Next
               </Button>
             </div>
@@ -742,13 +800,16 @@ export function DashboardContent() {
       {/* Overlay that blocks interaction and blurs page while syncing */}
       {syncing && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm bg-white/60 pointer-events-auto"
+          className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-md bg-white/70 pointer-events-auto animate-fade-in"
         >
-          <div className="flex items-center gap-4 bg-white/80 rounded-md p-4 shadow">
-            <div className="w-8 h-8 border-4 border-t-blue-600 border-neutral-200 rounded-full animate-spin" />
+          <div className="flex items-center gap-5 bg-white rounded-2xl p-8 shadow-2xl border border-neutral-200 animate-scale-in">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-neutral-200 rounded-full"></div>
+              <div className="w-12 h-12 border-4 border-t-slate-800 border-r-slate-600 rounded-full animate-spin absolute top-0 left-0"></div>
+            </div>
             <div>
-              <div className="text-lg font-medium text-neutral-900">{syncMessage}</div>
-              <div className="text-sm text-neutral-600">Please wait…</div>
+              <div className="text-xl font-semibold text-neutral-900">{syncMessage}</div>
+              <div className="text-sm text-neutral-500 mt-1">Please wait while we sync your data…</div>
             </div>
           </div>
         </div>
