@@ -190,6 +190,10 @@ export class AuthApi {
     })
     return apiClient.get<{ redirect_url: string }>(`/auth/redirect?${params}`)
   }
+
+  static async disconnect(): Promise<{ success: boolean; message: string }> {
+    return apiClient.post<{ success: boolean; message: string }>('/auth/disconnect')
+  }
 }
 
 // Yardi to QuickBooks API

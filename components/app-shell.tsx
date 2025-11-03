@@ -2,11 +2,11 @@
 
 import type React from "react"
 
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Settings, LogOut } from "lucide-react"
+import { LayoutDashboard, Settings } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -15,12 +15,6 @@ const navigation = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const router = useRouter()
-
-  const handleSignOut = () => {
-    localStorage.removeItem("elas-auth")
-    router.push("/login")
-  }
 
   return (
     <div className="min-h-screen bg-[oklch(0.97_0.02_140)]">
@@ -63,16 +57,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             )
           })}
         </nav>
-
-        <div className="p-4 border-t border-slate-700">
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-300 hover:bg-red-900/20 hover:text-red-400 w-full transition-all duration-200 group hover:shadow-md"
-          >
-            <LogOut className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" />
-            <span>Sign out</span>
-          </button>
-        </div>
       </aside>
 
       {/* Main content */}

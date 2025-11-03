@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
@@ -12,18 +11,16 @@ type DateRangeOption = "this-month" | "last-month"
 
 export function SettingsContent() {
   const [dateRange, setDateRange] = useState<DateRangeOption>("this-month")
-  const [clearingAccount, setClearingAccount] = useState("Clearing Account")
   const [qbConnected, setQbConnected] = useState(false)
   const [qbAccountName, setQbAccountName] = useState<string | null>(null)
+  const [qbLoading, setQbLoading] = useState(true)
   const { toast } = useToast()
 
   // Load settings from localStorage on mount
   useEffect(() => {
     const savedDateRange = localStorage.getItem("elas-date-range") as DateRangeOption
-    const savedClearingAccount = localStorage.getItem("elas-clearing-account")
 
     if (savedDateRange) setDateRange(savedDateRange)
-    if (savedClearingAccount) setClearingAccount(savedClearingAccount)
 
     // Check QuickBooks authentication status from API
     const checkAuthStatus = async () => {
@@ -42,6 +39,8 @@ export function SettingsContent() {
           setQbConnected(true)
           if (savedQbAccount) setQbAccountName(savedQbAccount)
         }
+      } finally {
+        setQbLoading(false)
       }
     }
 
@@ -51,8 +50,7 @@ export function SettingsContent() {
   // Save settings to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem("elas-date-range", dateRange)
-    localStorage.setItem("elas-clearing-account", clearingAccount)
-  }, [dateRange, clearingAccount])
+  }, [dateRange])
 
   // QuickBooks connect / disconnect handlers
   const handleConnectQuickBooks = async () => {
@@ -138,12 +136,114 @@ export function SettingsContent() {
     }
   }
 
-  const handleDisconnectQuickBooks = () => {
-    localStorage.removeItem('elas-qb-connected')
-    localStorage.removeItem('elas-qb-account')
-    setQbConnected(false)
-    setQbAccountName(null)
-    toast({ title: 'Disconnected QuickBooks', duration: 2000 })
+  const handleDisconnectQuickBooks = async () => {
+    try {
+      setQbLoading(true)
+      const result = await DataService.disconnectQuickBooks()
+      
+      // Always clear local state first
+      localStorage.removeItem('elas-qb-connected')
+      localStorage.removeItem('elas-qb-account')
+      
+      // Re-check auth status to see if backend actually disconnected
+      let stillConnected = false
+      try {
+        const authStatus = await DataService.getAuthStatus()
+        stillConnected = authStatus.authenticated
+      } catch (statusError) {
+        console.error('Error checking auth status after disconnect:', statusError)
+      }
+      
+      if (result.success && !stillConnected) {
+        // Successfully disconnected - backend cleared tokens
+        setQbConnected(false)
+        setQbAccountName(null)
+        toast({ 
+          title: 'Disconnected QuickBooks', 
+          description: 'Successfully disconnected from QuickBooks',
+          duration: 3000 
+        })
+      } else if (result.success && stillConnected) {
+        // Backend said success but tokens still active
+        setQbConnected(false)
+        setQbAccountName(null)
+        toast({ 
+          title: 'Disconnect incomplete', 
+          description: 'Backend disconnect reported success, but connection is still active. Please try again or contact support.',
+          duration: 6000 
+        })
+      } else {
+        // Backend disconnect failed
+        if (stillConnected) {
+          // Backend still has tokens - can't disconnect
+          setQbConnected(true)
+          // Re-fetch account name if available
+          try {
+            const authStatus = await DataService.getAuthStatus()
+            if (authStatus.authenticated && authStatus.realm_id) {
+              setQbAccountName(`QuickBooks Account (${authStatus.realm_id})`)
+            }
+          } catch (e) {
+            // Ignore
+          }
+          toast({ 
+            title: 'Disconnect failed', 
+            description: result.error || 'Backend server error. QuickBooks connection is still active. Please try again later.',
+            duration: 6000 
+          })
+        } else {
+          // Backend failed but tokens are cleared somehow
+          setQbConnected(false)
+          setQbAccountName(null)
+          toast({ 
+            title: 'Disconnected (local)', 
+            description: result.error || 'Backend error occurred, but connection appears to be cleared.',
+            duration: 5000 
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error disconnecting QuickBooks:', error)
+      
+      // Clear local state
+      localStorage.removeItem('elas-qb-connected')
+      localStorage.removeItem('elas-qb-account')
+      
+      // Check if still connected on backend
+      let stillConnected = false
+      try {
+        const authStatus = await DataService.getAuthStatus()
+        stillConnected = authStatus.authenticated
+        if (stillConnected) {
+          setQbConnected(true)
+          if (authStatus.realm_id) {
+            setQbAccountName(`QuickBooks Account (${authStatus.realm_id})`)
+          }
+        } else {
+          setQbConnected(false)
+          setQbAccountName(null)
+        }
+      } catch (statusError) {
+        setQbConnected(false)
+        setQbAccountName(null)
+      }
+      
+      if (stillConnected) {
+        toast({ 
+          title: 'Disconnect failed', 
+          description: `Error: ${error instanceof Error ? error.message : 'Unknown error'}. QuickBooks connection is still active.`,
+          duration: 6000 
+        })
+      } else {
+        toast({ 
+          title: 'Disconnected (local)', 
+          description: `Error occurred, but connection appears to be cleared.`,
+          duration: 5000 
+        })
+      }
+    } finally {
+      setQbLoading(false)
+    }
   }
 
   const handleDateRangeChange = (value: string) => {
@@ -151,14 +251,6 @@ export function SettingsContent() {
     toast({
       title: "Settings saved",
       description: "Default date range updated",
-      duration: 2000,
-    })
-  }
-
-  const handleClearingAccountBlur = () => {
-    toast({
-      title: "Settings saved",
-      description: "Clearing account updated",
       duration: 2000,
     })
   }
@@ -181,25 +273,28 @@ export function SettingsContent() {
 
           <div className="flex items-center gap-4">
             <div className="flex-1">
-              {qbConnected ? (
-                <div className="text-sm text-neutral-700 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span>Connected: <span className="font-semibold">{qbAccountName}</span></span>
+              {qbLoading ? (
+                <div className="text-sm text-neutral-500">Checking connection...</div>
+              ) : qbConnected ? (
+                <div className="text-sm text-neutral-700">
+                  Connected:{" "}
+                  <span className="font-medium">{qbAccountName}</span>
                 </div>
               ) : (
-                <div className="text-sm text-neutral-500 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-neutral-300 rounded-full"></div>
-                  <span>Not connected</span>
-                </div>
+                <div className="text-sm text-neutral-500">Not connected</div>
               )}
             </div>
 
-            {qbConnected ? (
+            {qbLoading ? (
+              <Button size="sm" disabled>
+                Loading...
+              </Button>
+            ) : qbConnected ? (
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={handleDisconnectQuickBooks}
-                className="transition-all duration-200 hover:scale-105 hover:shadow-lg">
+                disabled={qbLoading}>
                 Disconnect
               </Button>
             ) : (
@@ -235,28 +330,6 @@ export function SettingsContent() {
               </Label>
             </div>
           </RadioGroup>
-        </div>
-
-        <div className="border-t border-neutral-200" />
-
-        {/* Clearing Account */}
-        <div className="space-y-4 p-6 bg-gradient-to-r from-neutral-50 to-white rounded-xl border border-neutral-100">
-          <div>
-            <h3 className="text-lg font-semibold text-neutral-900">Clearing Account</h3>
-            <p className="text-sm text-neutral-500 mt-1">
-              Account name used for Journal Entries when receipts don't match invoices
-            </p>
-          </div>
-
-          <div className="max-w-md">
-            <Input
-              value={clearingAccount}
-              onChange={(e) => setClearingAccount(e.target.value)}
-              onBlur={handleClearingAccountBlur}
-              placeholder="Enter clearing account name"
-              className="transition-all duration-200 focus:shadow-md"
-            />
-          </div>
         </div>
       </div>
     </div>

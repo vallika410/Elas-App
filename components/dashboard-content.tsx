@@ -5,11 +5,12 @@ import { DataService, type ExpenseInvoice, type RentPayment } from "@/lib/data-s
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { DatePicker } from "@/components/ui/date-picker"
-import { Search, Info } from "lucide-react"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { Search, Info, AlertCircle } from "lucide-react"
 import { format, formatDistanceToNow } from 'date-fns'
 import { useToast } from "@/hooks/use-toast"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
+import { useRouter, usePathname } from "next/navigation"
 import Image from "next/image"
 
 export function DashboardContent() {
@@ -69,7 +70,10 @@ export function DashboardContent() {
   const [syncMessage, setSyncMessage] = useState("")
   // State for last sync timestamps
   const [lastYardiSync, setLastYardiSync] = useState<string | null>(null)
-  const [lastQuickBooksSync, setLastQuickBooksSync] = useState<string | null>(null)
+  // State for QuickBooks connection message
+  const [showQbConnectionMessage, setShowQbConnectionMessage] = useState(false)
+  const router = useRouter()
+  const pathname = usePathname()
   // Tooltip-controlled exact-time display (Radix Tooltip handles placement, focus and outside click)
 
   useEffect(() => {
@@ -84,22 +88,101 @@ export function DashboardContent() {
     loadRentPayments()
   }, [rentSearch, fromDate, toDate])
 
-  // load last sync timestamps from localStorage on mount
+  // load last sync timestamps from backend on mount
   useEffect(() => {
-    const loadTimestampsFromStorage = () => {
+    const fetchTimestampsFromBackend = async () => {
       try {
-        const yardiSync = localStorage.getItem('lastYardiSync')
-        const quickBooksSync = localStorage.getItem('lastQuickBooksSync')
+        // Get user ID from localStorage (email or user identifier)
+        // For now, we'll use a placeholder userId. Update login to store actual user info
+        const userEmail = localStorage.getItem('elas-user-email') || 'user@example.com'
         
-        setLastYardiSync(yardiSync)
-        setLastQuickBooksSync(quickBooksSync)
+        const response = await fetch(`/api/sync-timestamp?userId=${encodeURIComponent(userEmail)}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.data) {
+            setLastYardiSync(data.data.yardiSync)
+          }
+        }
       } catch (error) {
-        console.error('Error loading sync timestamps from localStorage:', error)
+        console.error('Error fetching sync timestamps from backend:', error)
+        // Fallback to localStorage if backend fetch fails
+        setLastYardiSync(prev => prev ?? localStorage.getItem('lastYardiSync'))
       }
     }
     
-    loadTimestampsFromStorage()
+    fetchTimestampsFromBackend()
   }, [])
+
+  // Function to check QuickBooks connection status
+  const checkQuickBooksConnection = async () => {
+    try {
+      const authStatus = await DataService.getAuthStatus()
+      
+      // Show message if QuickBooks is not connected
+      if (!authStatus.authenticated) {
+        setShowQbConnectionMessage(true)
+      } else {
+        // If connected, hide the message
+        setShowQbConnectionMessage(false)
+      }
+    } catch (error) {
+      // If check fails, show the message to prompt connection
+      console.error('Error checking auth status:', error)
+      setShowQbConnectionMessage(true)
+    }
+  }
+
+  // Show QuickBooks connection message after login or if not connected
+  useEffect(() => {
+    const checkAndShowMessage = async () => {
+      await checkQuickBooksConnection()
+      // Clear the login prompt flag after checking
+      localStorage.removeItem('elas-show-qb-prompt')
+    }
+    
+    checkAndShowMessage()
+  }, [])
+
+  // Re-check connection status when navigating back to dashboard
+  useEffect(() => {
+    if (pathname === '/dashboard') {
+      // Small delay to ensure settings page state updates are complete
+      const timer = setTimeout(() => {
+        checkQuickBooksConnection()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [pathname])
+
+  // Check QuickBooks connection status periodically and hide message when connected
+  useEffect(() => {
+    if (!showQbConnectionMessage) return
+
+    // Check periodically every 2 seconds while message is visible
+    const interval = setInterval(() => {
+      checkQuickBooksConnection()
+    }, 2000)
+
+    // Also check when window regains focus (user comes back from settings)
+    const handleFocus = () => {
+      checkQuickBooksConnection()
+    }
+    window.addEventListener('focus', handleFocus)
+
+    // Check when page becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        checkQuickBooksConnection()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [showQbConnectionMessage])
 
   const getDateRange = () => {
     const now = new Date()
@@ -267,97 +350,6 @@ export function DashboardContent() {
     }
   }
 
-  const handleSyncQuickBooks = async () => {
-    try {
-      // show global sync overlay
-      setSyncing(true)
-      setSyncMessage("Loading from QuickBooks...")
-      // Check authentication status first
-      const authStatus = await DataService.getAuthStatus()
-      
-      if (!authStatus.authenticated) {
-        // Initiate OAuth flow
-        const authUrl = await DataService.initiateQuickBooksAuth('sandbox')
-        window.open(authUrl, '_blank', 'width=600,height=700')
-        toast({ title: 'Opened QuickBooks connect window', duration: 3000 })
-        // If auth window opened, stop the overlay so user can interact if needed
-        setSyncing(false)
-        setSyncMessage("")
-        return
-      }
-
-      // If authenticated, sync QuickBooks to Yardi
-      toast({ title: 'Starting sync from QuickBooks...', duration: 2000 })
-      setLoadingExpenses(true)
-      setLoadingRent(true)
-
-      // Get date range for sync
-      const { from, to } = getDateRange()
-      
-      const syncOperation = await DataService.syncQuickBooksToYardi('all', from, to, 'DEFAULT')
-      
-      // Use helper functions to check results
-      const recordsProcessed = getCount(syncOperation)
-      const hasFailed = isFail(syncOperation)
-      
-      // Refresh the data first
-      await loadExpenses()
-      await loadRentPayments()
-      
-      // Hide sync overlay before showing toast
-      setSyncing(false)
-      setSyncMessage("")
-      setLoadingExpenses(false)
-      setLoadingRent(false)
-      
-      // Small delay to ensure overlay is fully removed before showing toast
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
-      // Show appropriate toast message
-      if (hasFailed) {
-        toast({ 
-          title: 'QuickBooks sync failed', 
-          description: syncOperation.message || 'An error occurred during sync',
-          duration: 5000 
-        })
-      } else if (recordsProcessed > 0) {
-        toast({ 
-          title: 'QuickBooks sync completed successfully', 
-          description: `Processed ${recordsProcessed} records`,
-          duration: 5000 
-        })
-        // record the last successful sync time
-        const successTime = new Date().toISOString()
-        setLastQuickBooksSync(successTime)
-        saveTimestampToStorage('quickbooks', successTime)
-      } else {
-        toast({ 
-          title: 'QuickBooks sync completed', 
-          description: syncOperation.message || `Status: ${syncOperation.status || 'unknown'}`,
-          duration: 5000 
-        })
-        const successTime = new Date().toISOString()
-        setLastQuickBooksSync(successTime)
-        saveTimestampToStorage('quickbooks', successTime)
-      }
-
-    } catch (error) {
-      // Hide sync overlay
-      setSyncing(false)
-      setSyncMessage("")
-      setLoadingExpenses(false)
-      setLoadingRent(false)
-      
-      // Show error toast
-      await new Promise(resolve => setTimeout(resolve, 100))
-      toast({ 
-        title: 'QuickBooks sync error', 
-        description: error instanceof Error ? error.message : 'Unknown error',
-        duration: 5000 
-      })
-    }
-  }
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -423,7 +415,28 @@ export function DashboardContent() {
     <TooltipProvider>
     <div className="relative">
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in">
+        {/* QuickBooks Connection Message */}
+        {showQbConnectionMessage && (
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <div className="flex-1">
+              <AlertTitle className="text-blue-900 font-medium">Connect QuickBooks</AlertTitle>
+              <AlertDescription className="text-blue-800 mt-1 flex items-center gap-3">
+                <span>Go to settings page to connect with QuickBooks</span>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    router.push('/settings')
+                  }}
+                >
+                  Go to Settings
+                </Button>
+              </AlertDescription>
+            </div>
+          </Alert>
+        )}
+
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-neutral-900 tracking-tight">Dashboard</h1>
             <p className="text-sm text-neutral-500 mt-1">QuickBooks data synced from approved transactions</p>
@@ -455,37 +468,6 @@ export function DashboardContent() {
                     </TooltipTrigger>
                     <TooltipContent side="bottom" sideOffset={6}>
                       {lastYardiSync ? formatShortTimestamp(lastYardiSync) : 'Never'}
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col items-center animate-slide-in-right" style={{ animationDelay: "0.2s" }}>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={handleSyncQuickBooks} 
-                disabled={syncing}
-                className="transition-all duration-200 hover:shadow-md hover:scale-105 hover:border-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Sync from QuickBooks<Image src="/quickbooks.svg" alt="QuickBooks" className="object-contain ml-2" priority width={20} height={20}/>
-              </Button>
-              <div className="relative mt-1">
-                <div className="flex items-center gap-2">
-                  <div className="text-xs text-neutral-500">{lastQuickBooksSync ? `Last Sync: ${formatRelativeTime(lastQuickBooksSync)}` : 'Never'}</div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        aria-label="Show exact QuickBooks sync time"
-                        className="p-1 rounded-sm text-neutral-400 hover:text-neutral-600 transition-colors duration-200"
-                        type="button"
-                      >
-                        <Info className="w-3 h-3" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" sideOffset={6} >
-                      {lastQuickBooksSync ? formatShortTimestamp(lastQuickBooksSync) : 'Never'}
                     </TooltipContent>
                   </Tooltip>
                 </div>

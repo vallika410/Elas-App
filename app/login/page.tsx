@@ -20,6 +20,7 @@ export default function LoginPage() {
     if (email && password) {
       localStorage.setItem("elas-auth", "true")
       localStorage.setItem("elas-user-email", email)
+      localStorage.setItem("elas-show-qb-prompt", "true")
       router.push("/dashboard")
     }
   }

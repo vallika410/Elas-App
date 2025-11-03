@@ -83,6 +83,44 @@ export class DataService {
     }
   }
 
+  static async disconnectQuickBooks(): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await AuthApi.disconnect()
+      return { success: response.success, error: response.message }
+    } catch (error) {
+      console.error('Failed to disconnect QuickBooks:', error)
+      if (error instanceof ApiError) {
+        // Try to parse error body if it's JSON
+        let errorMessage = error.message
+        try {
+          if (error.body) {
+            const errorBody = typeof error.body === 'string' ? JSON.parse(error.body) : error.body
+            errorMessage = errorBody.detail || errorBody.message || error.body
+          }
+        } catch (parseError) {
+          // If parsing fails, use the original error body
+          errorMessage = error.body || error.message
+        }
+        
+        // Check for specific backend errors and provide user-friendly messages
+        if (errorMessage.includes("get_token_manager") || errorMessage.includes("not defined")) {
+          errorMessage = "Backend service error. Please contact support or try again later."
+        }
+        
+        return { 
+          success: false, 
+          error: error.status === 500 
+            ? `Server error: ${errorMessage}` 
+            : `API Error (${error.status}): ${errorMessage}` 
+        }
+      }
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error occurred' 
+      }
+    }
+  }
+
   // Sync operations
   static async syncYardiToQuickBooks(
     dataType: 'bills' | 'receipts' | 'bill_payments' | 'customer_payments' | 'all' = 'bills',
