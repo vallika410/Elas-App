@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { useRouter, usePathname } from "next/navigation"
 import Image from "next/image"
+import { DatePicker } from "@/components/ui/date-picker"
 
 export function DashboardContent() {
   // Initialize dates based on user's default preference using lazy initialization
@@ -88,29 +89,13 @@ export function DashboardContent() {
     loadRentPayments()
   }, [rentSearch, fromDate, toDate])
 
-  // load last sync timestamps from backend on mount
+  // load last sync timestamps from localStorage on mount
   useEffect(() => {
-    const fetchTimestampsFromBackend = async () => {
-      try {
-        // Get user ID from localStorage (email or user identifier)
-        // For now, we'll use a placeholder userId. Update login to store actual user info
-        const userEmail = localStorage.getItem('elas-user-email') || 'user@example.com'
-        
-        const response = await fetch(`/api/sync-timestamp?userId=${encodeURIComponent(userEmail)}`)
-        if (response.ok) {
-          const data = await response.json()
-          if (data.data) {
-            setLastYardiSync(data.data.yardiSync)
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching sync timestamps from backend:', error)
-        // Fallback to localStorage if backend fetch fails
-        setLastYardiSync(prev => prev ?? localStorage.getItem('lastYardiSync'))
-      }
+    // Load timestamp from localStorage only
+    const storedTimestamp = localStorage.getItem('lastYardiSync')
+    if (storedTimestamp) {
+      setLastYardiSync(storedTimestamp)
     }
-    
-    fetchTimestampsFromBackend()
   }, [])
 
   // Function to check QuickBooks connection status
@@ -132,11 +117,11 @@ export function DashboardContent() {
     }
   }
 
-  // Show QuickBooks connection message after login or if not connected
+  // Show QuickBooks connection message if not connected
   useEffect(() => {
     const checkAndShowMessage = async () => {
       await checkQuickBooksConnection()
-      // Clear the login prompt flag after checking
+      // Clear the QuickBooks prompt flag after checking
       localStorage.removeItem('elas-show-qb-prompt')
     }
     
