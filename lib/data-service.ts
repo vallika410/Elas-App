@@ -123,7 +123,7 @@ export class DataService {
 
   // Sync operations
   static async syncYardiToQuickBooks(
-    dataType: 'bills' | 'receipts' | 'bill_payments' | 'customer_payments' | 'all' = 'bills',
+    dataType: 'bills' | 'receipts' | 'journals' | 'customer_payments' = 'bills',
     propertyCode: string = 'chabot'
   ): Promise<SyncOperation> {
     try {
@@ -153,7 +153,7 @@ export class DataService {
   }
 
   static async syncQuickBooksToYardi(
-    dataType: 'bills' | 'receipts' | 'bill_payments' | 'customer_payments' | 'all' = 'all',
+    dataType: 'bills' | 'receipts' | 'journals' | 'customer_payments' = 'bills',
     startDate?: string,
     endDate?: string,
     propertyCode: string = 'DEFAULT'

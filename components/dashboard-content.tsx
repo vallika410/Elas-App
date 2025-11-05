@@ -238,23 +238,26 @@ export function DashboardContent() {
     try {
       // show global sync overlay
       setSyncing(true)
-      setSyncMessage("Loading from Yardi...")
+      setSyncMessage("Syncing all data types from Yardi...")
       setLoadingExpenses(true)
       setLoadingRent(true)
 
-      // Sync both bills and receipts from Yardi to QuickBooks
-      const [billsSync, receiptsSync] = await Promise.all([
+      // Sync all 3 data types from Yardi to QuickBooks
+      const [billsSync, receiptsSync, journalsSync] = await Promise.all([
         DataService.syncYardiToQuickBooks('bills', 'chabot'),
-        DataService.syncYardiToQuickBooks('receipts', 'chabot')
+        DataService.syncYardiToQuickBooks('receipts', 'chabot'),
+        DataService.syncYardiToQuickBooks('journals', 'chabot')
       ])
       
       // Use helper functions to check results
       const billsCount = getCount(billsSync)
       const receiptsCount = getCount(receiptsSync)
-      const totalRecords = billsCount + receiptsCount
+      const journalsCount = getCount(journalsSync)
+      const totalRecords = billsCount + receiptsCount + journalsCount
       
       const billsFailed = isFail(billsSync)
       const receiptsFailed = isFail(receiptsSync)
+      const journalsFailed = isFail(journalsSync)
       
       const failedSyncs = []
       const completedSyncs = []
@@ -262,13 +265,19 @@ export function DashboardContent() {
       if (billsFailed) {
         failedSyncs.push('Bills')
       } else if (billsCount > 0) {
-        completedSyncs.push(`Bills (${billsCount} records)`)
+        completedSyncs.push(`Bills (${billsCount})`)
       }
       
       if (receiptsFailed) {
-        failedSyncs.push('Receipts')
+        failedSyncs.push('Customer Payments')
       } else if (receiptsCount > 0) {
-        completedSyncs.push(`Receipts (${receiptsCount} records)`)
+        completedSyncs.push(`Customer Payments (${receiptsCount})`)
+      }
+      
+      if (journalsFailed) {
+        failedSyncs.push('Journals')
+      } else if (journalsCount > 0) {
+        completedSyncs.push(`Journals (${journalsCount})`)
       }
       
       // Refresh the data first
@@ -285,22 +294,26 @@ export function DashboardContent() {
       await new Promise(resolve => setTimeout(resolve, 100))
       
       // Show appropriate toast message
-      if (billsFailed && receiptsFailed) {
+      if (failedSyncs.length === 3) {
         toast({ 
           title: 'Yardi sync failed', 
-          description: 'Both bills and receipts sync failed',
+          description: 'All data types failed to sync. Please check your configuration.',
           duration: 5000 
         })
-      } else if (billsFailed || receiptsFailed) {
+      } else if (failedSyncs.length > 0 && completedSyncs.length > 0) {
         toast({ 
           title: 'Partial sync completed', 
-          description: `${failedSyncs[0]} sync failed, but ${completedSyncs.join(' and ')} completed successfully`,
-          duration: 5000 
+          description: `✅ ${completedSyncs.join(', ')} | ❌ ${failedSyncs.join(', ')} failed`,
+          duration: 6000 
         })
+        // record the last sync time even if partial
+        const successTime = new Date().toISOString()
+        setLastYardiSync(successTime)
+        saveTimestampToStorage('yardi', successTime)
       } else if (completedSyncs.length > 0) {
         toast({ 
-          title: 'Yardi sync completed successfully', 
-          description: `Synced ${completedSyncs.join(' and ')}. Total: ${totalRecords} records`,
+          title: '✅ All data types synced successfully', 
+          description: `${completedSyncs.join(', ')} | Total: ${totalRecords} records`,
           duration: 5000 
         })
         // record the last successful sync time
@@ -310,10 +323,10 @@ export function DashboardContent() {
       } else {
         toast({ 
           title: 'Yardi sync completed', 
-          description: `Bills: ${billsSync.status}, Receipts: ${receiptsSync.status}. Total: ${totalRecords} records`,
+          description: `No new records to sync | Total: ${totalRecords} records`,
           duration: 5000 
         })
-        // record the last successful sync time
+        // record the last sync time
         const successTime = new Date().toISOString()
         setLastYardiSync(successTime)
         saveTimestampToStorage('yardi', successTime)
