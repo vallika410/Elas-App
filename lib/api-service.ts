@@ -4,7 +4,7 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'
 
 // Types matching the backend API models
-export type DataType = 'bills' | 'receipts' | 'journals' | 'customer_payments'
+export type DataType = 'bills' | 'receipts' | 'journals' | 'customer_payments' | 'bill_payments'
 export type SyncDirection = 'yardi_to_qb' | 'qb_to_yardi'
 export type SyncStatus = 'init' | 'in_progress' | 'completed' | 'failed'
 

@@ -242,22 +242,25 @@ export function DashboardContent() {
       setLoadingExpenses(true)
       setLoadingRent(true)
 
-      // Sync all 3 data types from Yardi to QuickBooks
-      const [billsSync, receiptsSync, journalsSync] = await Promise.all([
+      // Sync all 4 data types from Yardi to QuickBooks (including bill payments/checks)
+      const [billsSync, receiptsSync, journalsSync, billPaymentsSync] = await Promise.all([
         DataService.syncYardiToQuickBooks('bills', 'chabot'),
         DataService.syncYardiToQuickBooks('receipts', 'chabot'),
-        DataService.syncYardiToQuickBooks('journals', 'chabot')
+        DataService.syncYardiToQuickBooks('journals', 'chabot'),
+        DataService.syncYardiToQuickBooks('bill_payments', 'chabot')
       ])
       
       // Use helper functions to check results
       const billsCount = getCount(billsSync)
       const receiptsCount = getCount(receiptsSync)
       const journalsCount = getCount(journalsSync)
-      const totalRecords = billsCount + receiptsCount + journalsCount
+      const billPaymentsCount = getCount(billPaymentsSync)
+      const totalRecords = billsCount + receiptsCount + journalsCount + billPaymentsCount
       
       const billsFailed = isFail(billsSync)
       const receiptsFailed = isFail(receiptsSync)
       const journalsFailed = isFail(journalsSync)
+      const billPaymentsFailed = isFail(billPaymentsSync)
       
       const failedSyncs = []
       const completedSyncs = []
@@ -280,6 +283,12 @@ export function DashboardContent() {
         completedSyncs.push(`Journals (${journalsCount})`)
       }
       
+      if (billPaymentsFailed) {
+        failedSyncs.push('Bill Payments')
+      } else if (billPaymentsCount > 0) {
+        completedSyncs.push(`Bill Payments (${billPaymentsCount})`)
+      }
+      
       // Refresh the data first
       await loadExpenses()
       await loadRentPayments()
@@ -294,7 +303,7 @@ export function DashboardContent() {
       await new Promise(resolve => setTimeout(resolve, 100))
       
       // Show appropriate toast message
-      if (failedSyncs.length === 3) {
+      if (failedSyncs.length === 4) {
         toast({ 
           title: 'Yardi sync failed', 
           description: 'All data types failed to sync. Please check your configuration.',

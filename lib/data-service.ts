@@ -33,6 +33,16 @@ export type RentPayment = {
   appliedInvoice?: string
 }
 
+export type BillPayment = {
+  id: string
+  vendorName: string
+  checkNumber: string
+  paymentDate: string
+  amount: number
+  reference: string
+  bankAccount?: string
+}
+
 // Sync operation types
 export type SyncOperation = {
   id: string
@@ -123,7 +133,7 @@ export class DataService {
 
   // Sync operations
   static async syncYardiToQuickBooks(
-    dataType: 'bills' | 'receipts' | 'journals' | 'customer_payments' = 'bills',
+    dataType: 'bills' | 'receipts' | 'journals' | 'customer_payments' | 'bill_payments' = 'bills',
     propertyCode: string = 'chabot'
   ): Promise<SyncOperation> {
     try {
@@ -153,7 +163,7 @@ export class DataService {
   }
 
   static async syncQuickBooksToYardi(
-    dataType: 'bills' | 'receipts' | 'journals' | 'customer_payments' = 'bills',
+    dataType: 'bills' | 'receipts' | 'journals' | 'customer_payments' | 'bill_payments' = 'bills',
     startDate?: string,
     endDate?: string,
     propertyCode: string = 'DEFAULT'
@@ -265,6 +275,37 @@ export class DataService {
       return result.data || []
     } catch (error) {
       console.error('Error fetching rent payments:', error)
+      // Return empty array if API fails - no mock data
+      return []
+    }
+  }
+
+  static async fetchBillPayments(params: {
+    from?: string
+    to?: string
+    search?: string
+  }): Promise<BillPayment[]> {
+    try {
+      const queryParams = new URLSearchParams()
+      if (params.from) queryParams.append('from_date', params.from)
+      if (params.to) queryParams.append('to_date', params.to)
+      if (params.search) queryParams.append('search', params.search)
+
+      const response = await fetch(`${API_BASE_URL}/data/bill-payments?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch bill payments: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      return result.data || []
+    } catch (error) {
+      console.error('Error fetching bill payments:', error)
       // Return empty array if API fails - no mock data
       return []
     }
